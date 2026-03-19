@@ -1,0 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;margin:0;}
+body,input,select,textarea,button{font-family:'Plus Jakarta Sans',system-ui,sans-serif;}
+:root{--bg:#fff;--bg2:#f7f6f3;--bg3:#f0efec;--border:#eceae5;--text:#1a1a1a;--text2:#555;--text3:#888;--text4:#bbb;}
+input[type=range]{accent-color:#1a1a1a;} input[type=checkbox]{accent-color:#1a1a1a;}
+::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px;}
+.pal-item:hover{background:#f7f6f3!important;} .nav-btn:hover{background:#ebe9e4!important;}
+.card-hover:hover{border-color:#aaa!important;} .pill-btn:hover{opacity:.8;}
