@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { createEntityHandler, VALID_W2_ENTITIES } from '@/lib/api-helpers';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
 export async function GET(request, { params }) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { entity } = await params;
   if (!VALID_W2_ENTITIES.includes(entity)) {
     return NextResponse.json({ error: 'Unknown entity' }, { status: 404 });
@@ -22,6 +25,8 @@ export async function GET(request, { params }) {
 }
 
 export async function PUT(request, { params }) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { entity } = await params;
   if (!VALID_W2_ENTITIES.includes(entity)) {
     return NextResponse.json({ error: 'Unknown entity' }, { status: 404 });
@@ -41,6 +46,8 @@ export async function PUT(request, { params }) {
 }
 
 export async function PATCH(request, { params }) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { entity } = await params;
   if (!VALID_W2_ENTITIES.includes(entity)) {
     return NextResponse.json({ error: 'Unknown entity' }, { status: 404 });

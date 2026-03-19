@@ -4,6 +4,7 @@ import { useDatabaseSync } from '@/lib/sync';
 import { CH, AREA_C, AREAS, W1_NAV, W2_NAV, WS } from '@/lib/constants';
 import { today } from '@/lib/utils';
 
+import { UserButton } from '@clerk/nextjs';
 import { Toast } from './ui';
 import CommandPalette from './CommandPalette';
 import QuickCapture from './QuickCapture';
@@ -127,6 +128,11 @@ export default function App(){
               ?Object.entries(CH).slice(0,3).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:v.color,flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{v.label}</span></div>)
               :AREAS.map(a=><div key={a} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:AREA_C[a].color,flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{a}</span></div>)
             }
+          </div>
+
+          {/* User */}
+          <div style={{paddingTop:12,marginTop:8,borderTop:"1px solid #eceae5",paddingLeft:8}}>
+            <UserButton afterSignOutUrl="/sign-in" />
           </div>
         </div>
 
