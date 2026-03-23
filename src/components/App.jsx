@@ -23,9 +23,12 @@ import W2Tasks from './w2/W2Tasks';
 import W2Goals from './w2/W2Goals';
 import W2Content from './w2/W2Content';
 import W2Tools from './w2/W2Tools';
+import W2Clients from './w2/W2Clients';
+import W2Notes from './w2/W2Notes';
+import W2Personal from './w2/W2Personal';
 
 const W1_ENTITIES = ['tasks', 'ideas', 'notes', 'events', 'goals', 'guests'];
-const W2_ENTITIES = ['projects', 'tasks', 'goals', 'content', 'tools'];
+const W2_ENTITIES = ['projects', 'tasks', 'goals', 'content', 'tools', 'clients', 'notes', 'personal'];
 
 export default function App(){
   const [ws,setWs]=useState("content");
@@ -41,7 +44,7 @@ export default function App(){
 
   // Database-synced state
   const [w1, setW1, w1Loaded] = useDatabaseSync('w1', W1_ENTITIES, {tasks:[],ideas:[],notes:[],events:[],goals:[],guests:[]});
-  const [w2, setW2, w2Loaded] = useDatabaseSync('w2', W2_ENTITIES, {projects:[],tasks:[],goals:[],content:[],tools:[]});
+  const [w2, setW2, w2Loaded] = useDatabaseSync('w2', W2_ENTITIES, {projects:[],tasks:[],goals:[],content:[],tools:[],clients:[],notes:[],personal:[]});
 
   const setW2Page=useCallback(p=>{if(p.startsWith("projects_")){setW2PageRaw("projects");setOpenProject(p.replace("projects_",""));}else{setW2PageRaw(p);setOpenProject(null);}},[]);
 
@@ -159,7 +162,10 @@ export default function App(){
               {w2Page==="projects"&&<W2Projects w2={w2} setW2={setW2} openProject={openProject} setOpenProject={setOpenProject}/>}
               {w2Page==="tasks"&&<W2Tasks w2={w2} setW2={setW2}/>}
               {w2Page==="goals"&&<W2Goals w2={w2} setW2={setW2}/>}
+              {w2Page==="clients"&&<W2Clients w2={w2} setW2={setW2}/>}
+              {w2Page==="personal"&&<W2Personal w2={w2} setW2={setW2}/>}
               {w2Page==="content"&&<W2Content w2={w2} setW2={setW2}/>}
+              {w2Page==="notes"&&<W2Notes w2={w2} setW2={setW2}/>}
               {w2Page==="tools"&&<W2Tools w2={w2} setW2={setW2}/>}
             </>
           )}

@@ -1,23 +1,36 @@
 'use client';
 
 import { Card, SLabel, PBar, AreaBadge, PrioDot, ChipBadge, Empty } from '../ui';
-import { PL, PL_COLS } from '@/lib/constants';
-import { today, fmtD, fmtFull, computeGoalProgress } from '@/lib/utils';
+import { PL, PL_COLS, CLIENT_ST } from '@/lib/constants';
+import { today, fmtD, fmtFull, computeGoalProgress, uid, calcNextDue } from '@/lib/utils';
 
 export default function W2Focus({w2,setW2,setPage}){
   const now=new Date(),td=today();
   const h=now.getHours();
   const greet=h<12?"Bom dia":h<18?"Boa tarde":"Boa noite";
-  const {tasks,projects,goals,content}=w2;
+  const {tasks,projects,goals,content,clients,personal}=w2;
   const pending=tasks.filter(t=>!t.done);
   const urgent=pending.filter(t=>t.priority==="alta"||(t.dueDate&&t.dueDate<=td));
   const overdue=pending.filter(t=>t.dueDate&&t.dueDate<td);
-  const focus=[...new Map([...overdue,...urgent].map(t=>[t.id,t])).values()].slice(0,6);
+  const focus=[...new Map([...overdue,...urgent].filter(t=>!t.isRecurring).map(t=>[t.id,t])).values()].slice(0,6);
+  const rotinas=pending.filter(t=>t.isRecurring&&t.dueDate&&t.dueDate<=td);
   const activeG=goals.filter(g=>g.status==="ativo");
   const avgG=activeG.length?Math.round(activeG.reduce((s,g)=>s+computeGoalProgress(g,tasks),0)/activeG.length):0;
   const todayC=content.filter(c=>c.scheduledDate===td&&c.status!=="published");
+  const pipelineClients=(clients||[]).filter(c=>c.status==="proposta"||c.status==="negociacao");
+  const personalToday=(personal||[]).filter(p=>p.date===td);
+  const personalDone=personalToday.filter(p=>p.done).length;
 
-  const toggle=id=>setW2(d=>({...d,tasks:d.tasks.map(t=>t.id===id?{...t,done:!t.done}:t)}));
+  const toggle=id=>setW2(d=>{
+    const t=d.tasks.find(x=>x.id===id);if(!t)return d;
+    if(t.isRecurring&&!t.done){
+      const nd=calcNextDue(t.dueDate||td,t.frequency);
+      const clone={...t,id:uid(),done:false,dueDate:nd,nextDue:nd,createdAt:new Date().toISOString()};
+      return{...d,tasks:[...d.tasks.map(x=>x.id===id?{...x,done:true}:x),clone]};
+    }
+    return{...d,tasks:d.tasks.map(x=>x.id===id?{...x,done:!x.done}:x)};
+  });
+  const togglePersonal=id=>setW2(d=>({...d,personal:(d.personal||[]).map(p=>p.id===id?{...p,done:!p.done}:p)}));
 
   return(
     <div>
@@ -28,7 +41,7 @@ export default function W2Focus({w2,setW2,setPage}){
           {label:"Em atraso",value:overdue.length,accent:overdue.length?"#c0392b":"#bbb"},
           {label:"Urgentes",value:urgent.length,accent:urgent.length?"#d68910":"#bbb"},
           {label:"Progresso médio",value:`${avgG}%`,accent:"#1e8449"},
-          {label:"No pipeline",value:content.filter(c=>c.status!=="published").length,accent:"#8e44ad"},
+          {label:"Em pipeline",value:pipelineClients.length,accent:pipelineClients.length?"#8e44ad":"#bbb"},
         ].map((s,i)=>(
           <Card key={i} style={{padding:"12px 14px"}}>
             <p style={{margin:0,fontSize:11,color:"#aaa",fontWeight:600,letterSpacing:"0.05em",textTransform:"uppercase"}}>{s.label}</p>
@@ -60,6 +73,27 @@ export default function W2Focus({w2,setW2,setPage}){
               </div>
             );
           })}
+          {rotinas.length>0&&(
+            <div style={{marginTop:20}}>
+              <SLabel>Rotinas de hoje</SLabel>
+              {rotinas.map(t=>{
+                const proj=projects.find(p=>p.id===t.projectId);
+                return(
+                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid #f5f4f1"}}>
+                    <input type="checkbox" checked={!!t.done} onChange={()=>toggle(t.id)} style={{width:15,height:15,cursor:"pointer",flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <p style={{margin:0,fontSize:13,fontWeight:500}}>{t.title}</p>
+                      <div style={{display:"flex",gap:6,marginTop:2,alignItems:"center"}}>
+                        {proj&&<AreaBadge area={proj.area}/>}
+                        <span style={{fontSize:10,color:"#8e44ad",fontWeight:600}}>↻</span>
+                        {t.dueDate&&<span style={{fontSize:11,color:"#bbb"}}>{fmtD(t.dueDate)}</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {todayC.length>0&&(
             <div style={{marginTop:20}}>
               <SLabel>Conteúdo programado hoje</SLabel>
@@ -123,6 +157,39 @@ export default function W2Focus({w2,setW2,setPage}){
               );
             })}
           </div>
+          {personalToday.length>0&&(
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <SLabel>Pessoal — hoje</SLabel>
+                <button onClick={()=>setPage("personal")} style={{fontSize:11,color:"#aaa",background:"none",border:"none",cursor:"pointer",padding:0}}>ver →</button>
+              </div>
+              {personalToday.map(p=>(
+                <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid #f5f4f1"}}>
+                  <input type="checkbox" checked={p.done} onChange={()=>togglePersonal(p.id)} style={{width:14,height:14,cursor:"pointer",flexShrink:0}}/>
+                  <span style={{fontSize:12,color:p.done?"#bbb":"#555",textDecoration:p.done?"line-through":"none"}}>{p.title}</span>
+                </div>
+              ))}
+              <p style={{margin:"4px 0 0",fontSize:11,color:"#ccc"}}>{personalDone}/{personalToday.length}</p>
+            </div>
+          )}
+          {pipelineClients.length>0&&(
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <SLabel>Clientes em pipeline</SLabel>
+                <button onClick={()=>setPage("clients")} style={{fontSize:11,color:"#aaa",background:"none",border:"none",cursor:"pointer",padding:0}}>ver →</button>
+              </div>
+              {pipelineClients.map(c=>{
+                const st=CLIENT_ST[c.status];
+                return(
+                  <div key={c.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid #f5f4f1"}}>
+                    <span style={{fontSize:10,fontWeight:700,color:st?.color,background:st?.bg,padding:"1px 5px",borderRadius:3}}>{st?.label}</span>
+                    <span style={{fontSize:12,color:"#555",flex:1}}>{c.name}</span>
+                    {c.dealValue>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:600}}>R$ {Number(c.dealValue).toLocaleString("pt-BR")}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

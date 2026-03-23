@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS w2_projects (
   description   TEXT DEFAULT '',
   notes         TEXT DEFAULT '',
   goal_id       TEXT DEFAULT NULL,
+  client_id     TEXT DEFAULT NULL,
   created_at    TEXT NOT NULL
 );
 
@@ -120,6 +121,9 @@ CREATE TABLE IF NOT EXISTS w2_tasks (
   notes         TEXT DEFAULT '',
   done          BOOLEAN NOT NULL DEFAULT FALSE,
   goal_id       TEXT DEFAULT NULL,
+  is_recurring  BOOLEAN NOT NULL DEFAULT FALSE,
+  frequency     TEXT DEFAULT '',
+  next_due      TEXT DEFAULT '',
   created_at    TEXT NOT NULL
 );
 
@@ -154,4 +158,37 @@ CREATE TABLE IF NOT EXISTS w2_tools (
   status        TEXT NOT NULL DEFAULT 'on',
   url           TEXT DEFAULT '',
   description   TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS w2_clients (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL DEFAULT '',
+  company       TEXT DEFAULT '',
+  contact       TEXT DEFAULT '',
+  email         TEXT DEFAULT '',
+  phone         TEXT DEFAULT '',
+  area          TEXT NOT NULL DEFAULT 'Patagon AI',
+  deal_value    REAL DEFAULT 0,
+  status        TEXT NOT NULL DEFAULT 'lead',
+  notes         TEXT DEFAULT '',
+  created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS w2_notes (
+  id            TEXT PRIMARY KEY,
+  title         TEXT NOT NULL DEFAULT '',
+  content       TEXT DEFAULT '',
+  project_id    TEXT DEFAULT '',
+  category      TEXT NOT NULL DEFAULT 'Geral',
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS w2_personal (
+  id            TEXT PRIMARY KEY,
+  title         TEXT NOT NULL DEFAULT '',
+  done          BOOLEAN NOT NULL DEFAULT FALSE,
+  date          TEXT NOT NULL,
+  notes         TEXT DEFAULT '',
+  created_at    TEXT NOT NULL
 );

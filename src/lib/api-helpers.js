@@ -17,11 +17,14 @@ const TABLE_CONFIG = {
   w1_events:   { columns: ['id','title','channel','type','description','link','date','status','alt_title','thumbnail_concept','open_loop','interviewee','checklist','views','ctr','avg_retention','new_subs','winning_thumb','score_thumbnail','score_loop','score_original','idea_id','is_production','guest_id','structure','questions','cta','strategic_notes','created_at'], order: 'date ASC', jsonb: ['checklist'] },
   w1_guests:   { columns: ['id','name','company','role','linkedin','email','phone','status','notes','created_at'], order: 'name ASC' },
   w1_goals:    { columns: ['id','title','description','category','status','progress','deadline','progress_mode','key_results','created_at'], order: 'created_at DESC', jsonb: ['key_results'] },
-  w2_projects: { columns: ['id','name','area','status','description','notes','goal_id','created_at'], order: 'created_at ASC' },
-  w2_tasks:    { columns: ['id','title','project_id','priority','due_date','notes','done','goal_id','created_at'], order: 'created_at DESC' },
+  w2_projects: { columns: ['id','name','area','status','description','notes','goal_id','client_id','created_at'], order: 'created_at ASC' },
+  w2_tasks:    { columns: ['id','title','project_id','priority','due_date','notes','done','goal_id','is_recurring','frequency','next_due','created_at'], order: 'created_at DESC' },
   w2_goals:    { columns: ['id','title','description','category','status','progress','deadline','progress_mode','key_results','created_at'], order: 'created_at ASC', jsonb: ['key_results'] },
   w2_content:  { columns: ['id','title','channel','type','status','scheduled_date','description','created_at'], order: 'created_at DESC' },
   w2_tools:    { columns: ['id','name','category','status','url','description'], order: 'name ASC', jsFieldMap: { desc: 'description' } },
+  w2_clients:  { columns: ['id','name','company','contact','email','phone','area','deal_value','status','notes','created_at'], order: 'created_at DESC' },
+  w2_notes:    { columns: ['id','title','content','project_id','category','created_at','updated_at'], order: 'updated_at DESC' },
+  w2_personal: { columns: ['id','title','done','date','notes','created_at'], order: 'date ASC, created_at ASC' },
 };
 
 // ── Resolve table name ───────────────────────────────────────────
@@ -124,4 +127,4 @@ export function createEntityHandler(workspace, entity) {
 }
 
 export const VALID_W1_ENTITIES = ['tasks', 'ideas', 'notes', 'events', 'goals', 'guests'];
-export const VALID_W2_ENTITIES = ['projects', 'tasks', 'goals', 'content', 'tools'];
+export const VALID_W2_ENTITIES = ['projects', 'tasks', 'goals', 'content', 'tools', 'clients', 'notes', 'personal'];

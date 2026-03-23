@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Modal, Inp, Sel, Btn, FPill, toast } from './ui';
 import { CH, CTYPES } from '@/lib/constants';
-import { uid } from '@/lib/utils';
+import { uid, today } from '@/lib/utils';
 
 export default function QuickCapture({open,type:initialType,onClose,ws,w1,setW1,w2,setW2}){
   const [type,setType]=useState(initialType||"task");
@@ -24,14 +24,16 @@ export default function QuickCapture({open,type:initialType,onClose,ws,w1,setW1,
     }
     if(type==="content") setW2(d=>({...d,content:[{id:uid(),title:form.title,channel:form.channel2,type:form.contentType,status:"idea",scheduledDate:"",description:"",createdAt:new Date().toISOString()},...d.content]}));
     if(type==="guest") setW1(d=>({...d,guests:[{id:uid(),name:form.title,company:"",role:"",linkedin:"",email:"",phone:"",status:"potencial",notes:"",createdAt:new Date().toISOString()},...(d.guests||[])]}));
-    const labels={task:"Task criada",idea:"Ideia criada",note:"Nota criada",project:"Projeto criado",goal:"Meta criada",content:"Conteúdo criado",guest:"Convidado adicionado"};
+    if(type==="client") setW2(d=>({...d,clients:[{id:uid(),name:form.title,company:"",contact:"",email:"",phone:"",area:"Patagon AI",dealValue:0,status:"lead",notes:"",createdAt:new Date().toISOString()},...(d.clients||[])]}));
+    if(type==="personal") setW2(d=>({...d,personal:[{id:uid(),title:form.title,done:false,date:today(),notes:"",createdAt:new Date().toISOString()},...(d.personal||[])]}));
+    const labels={task:"Task criada",idea:"Ideia criada",note:"Nota criada",project:"Projeto criado",goal:"Meta criada",content:"Conteúdo criado",guest:"Convidado adicionado",client:"Cliente adicionado",personal:"Tarefa pessoal criada"};
     toast(labels[type]||"Criado");
     onClose();
   };
 
   const TYPES=ws==="content"
     ?[["task","Task"],["idea","Ideia"],["note","Nota"],["goal","Meta"],["guest","Convidado"]]
-    :[["task","Task"],["project","Projeto"],["goal","Meta"],["content","Conteúdo"]];
+    :[["task","Task"],["project","Projeto"],["client","Cliente"],["goal","Meta"],["content","Conteúdo"],["personal","Pessoal"]];
 
   return(
     <Modal open={open} onClose={onClose} title={null} width={420}>

@@ -25,12 +25,15 @@ export default function W2Projects({w2,setW2,openProject,setOpenProject}){
   if(openProject){
     const proj=projects.find(p=>p.id===openProject);
     if(proj) return(
-      <ProjectPage project={proj} tasks={tasks} goals={goals}
+      <ProjectPage project={proj} tasks={tasks} goals={goals} clients={w2.clients||[]} projectNotes={w2.notes||[]}
         onBack={()=>setOpenProject(null)}
         onUpdateProject={updated=>setW2(d=>({...d,projects:d.projects.map(p=>p.id===updated.id?updated:p)}))}
         onToggleTask={id=>setW2(d=>({...d,tasks:d.tasks.map(t=>t.id===id?{...t,done:!t.done}:t)}))}
         onDeleteTask={id=>{if(!window.confirm("Excluir?"))return;setW2(d=>({...d,tasks:d.tasks.filter(t=>t.id!==id)}));toast("Task excluída");}}
         onAddTask={t=>setW2(d=>({...d,tasks:[...d.tasks,t]}))}
+        onAddNote={n=>setW2(d=>({...d,notes:[n,...(d.notes||[])]}))}
+        onUpdateNote={(id,f,v)=>setW2(d=>({...d,notes:(d.notes||[]).map(n=>n.id===id?{...n,[f]:v,updatedAt:new Date().toISOString()}:n)}))}
+        onDeleteNote={id=>{setW2(d=>({...d,notes:(d.notes||[]).filter(n=>n.id!==id)}));toast("Nota excluída");}}
       />
     );
   }
@@ -92,12 +95,20 @@ export default function W2Projects({w2,setW2,openProject,setOpenProject}){
             <FormRow label="Área"><Sel value={draft.area||"Patagon AI"} onChange={e=>setDraft(d=>({...d,area:e.target.value}))} style={{width:"100%"}}>{AREAS.map(a=><option key={a} value={a}>{a}</option>)}</Sel></FormRow>
             <FormRow label="Status"><Sel value={draft.status||"todo"} onChange={e=>setDraft(d=>({...d,status:e.target.value}))} style={{width:"100%"}}><option value="todo">A fazer</option><option value="doing">Em andamento</option><option value="done">Concluído</option></Sel></FormRow>
           </div>
-          <FormRow label="Meta vinculada">
-            <Sel value={draft.goalId||""} onChange={e=>setDraft(d=>({...d,goalId:e.target.value||null}))} style={{width:"100%"}}>
-              <option value="">— sem meta —</option>
-              {w2.goals.map(g=><option key={g.id} value={g.id}>{g.title.slice(0,40)}</option>)}
-            </Sel>
-          </FormRow>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <FormRow label="Meta vinculada">
+              <Sel value={draft.goalId||""} onChange={e=>setDraft(d=>({...d,goalId:e.target.value||null}))} style={{width:"100%"}}>
+                <option value="">— sem meta —</option>
+                {w2.goals.map(g=><option key={g.id} value={g.id}>{g.title.slice(0,40)}</option>)}
+              </Sel>
+            </FormRow>
+            <FormRow label="Cliente vinculado">
+              <Sel value={draft.clientId||""} onChange={e=>setDraft(d=>({...d,clientId:e.target.value||null}))} style={{width:"100%"}}>
+                <option value="">— sem cliente —</option>
+                {(w2.clients||[]).map(c=><option key={c.id} value={c.id}>{c.name}{c.company?" ("+c.company+")":""}</option>)}
+              </Sel>
+            </FormRow>
+          </div>
           <FormRow label="Descrição"><Txa value={draft.description||""} onChange={e=>setDraft(d=>({...d,description:e.target.value}))} rows={2} placeholder="Objetivo e contexto…"/></FormRow>
           <div style={{display:"flex",justifyContent:"flex-end",gap:8}}><Btn variant="ghost" onClick={()=>setModal(null)}>Cancelar</Btn><Btn onClick={save}>Salvar</Btn></div>
         </div>

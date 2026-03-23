@@ -24,6 +24,12 @@ export const PL_COLS=["idea","draft","review","ready","published"];
 export const TOOL_CYCLE={on:"warn",warn:"off",off:"on"};
 export const TOOL_ST={on:{label:"On",bg:"#eafaf1",color:"#1e8449"},warn:{label:"Atenção",bg:"#fef9e7",color:"#d68910"},off:{label:"Off",bg:"#f4f4f3",color:"#888"}};
 export const GCATS2=["Produto","Financeiro","Marca Pessoal","Aprendizado","Pessoal"];
+export const CLIENT_ST={lead:{label:"Lead",color:"#888",bg:"#f4f4f3"},proposta:{label:"Proposta",color:"#1a5276",bg:"#eaf2fb"},negociacao:{label:"Negociação",color:"#d68910",bg:"#fef9e7"},fechado:{label:"Fechado",color:"#8e44ad",bg:"#f5eef8"},ativo:{label:"Ativo",color:"#1e8449",bg:"#eafaf1"},perdido:{label:"Perdido",color:"#c0392b",bg:"#fdf2f2"}};
+export const CLIENT_PIPE_KEYS=["lead","proposta","negociacao","fechado","ativo"];
+export const CLIENT_ST_KEYS=["lead","proposta","negociacao","fechado","ativo","perdido"];
+export const CLIENT_NEXT={lead:"proposta",proposta:"negociacao",negociacao:"fechado",fechado:"ativo"};
+export const NOTE_CATS_W2=["Geral","Reunião","Decisão","Referência"];
+export const FREQ={daily:"Diário",weekly:"Semanal",biweekly:"Quinzenal",monthly:"Mensal"};
 
 // ── Shared ───────────────────────────────────────────────────────
 export const MONTHS=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -31,5 +37,5 @@ export const WDAYS=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
 // ── Nav & Workspaces ─────────────────────────────────────────────
 export const W1_NAV=[{id:"home",label:"Foco do Dia",icon:"◈"},{id:"goals",label:"Metas",icon:"◎"},{id:"tasks",label:"Tasks",icon:"✓"},{id:"calendar",label:"Calendário",icon:"◫"},{id:"ideas",label:"Ideias",icon:"✦"},{id:"notes",label:"Notas",icon:"☰"},{id:"guests",label:"Convidados",icon:"◇"}];
-export const W2_NAV=[{id:"home",label:"Foco do Dia",icon:"◈"},{id:"projects",label:"Projetos",icon:"⬡"},{id:"tasks",label:"Tasks",icon:"✓"},{id:"goals",label:"Metas",icon:"◎"},{id:"content",label:"Conteúdo",icon:"▷"},{id:"tools",label:"Ferramentas",icon:"⚙"}];
+export const W2_NAV=[{id:"home",label:"Foco do Dia",icon:"◈"},{id:"projects",label:"Projetos",icon:"⬡"},{id:"clients",label:"Clientes",icon:"◇"},{id:"tasks",label:"Tasks",icon:"✓"},{id:"personal",label:"Pessoal",icon:"○"},{id:"goals",label:"Metas",icon:"◎"},{id:"content",label:"Conteúdo",icon:"▷"},{id:"notes",label:"Notas",icon:"☰"},{id:"tools",label:"Ferramentas",icon:"⚙"}];
 export const WS=[{id:"content",label:"Content OS",sub:"YT · IG · LinkedIn",icon:"C"},{id:"opb",label:"One Person Business",sub:"Patagon · Mazul · Indie",icon:"B"}];

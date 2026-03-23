@@ -2,28 +2,39 @@
 
 import { useState, useEffect } from 'react';
 import { SLabel, AreaBadge, Inp, Sel, Btn, PBar, Empty, IS, toast } from '../ui';
+import { NOTE_CATS_W2 } from '@/lib/constants';
 import { uid, computeGoalProgress } from '@/lib/utils';
 import TaskRow from '../TaskRow';
 
-export default function ProjectPage({project,tasks,goals,onBack,onUpdateProject,onToggleTask,onDeleteTask,onAddTask}){
+export default function ProjectPage({project,tasks,goals,clients,projectNotes,onBack,onUpdateProject,onToggleTask,onDeleteTask,onAddTask,onAddNote,onUpdateNote,onDeleteNote}){
   const [notes,setNotes]=useState(project.notes||"");
   const [newTask,setNewTask]=useState("");
   const [prio,setPrio]=useState("media");
   const [due,setDue]=useState("");
+  const [newNoteTit,setNewNoteTit]=useState("");
   const ptasks=tasks.filter(t=>t.projectId===project.id).sort((a,b)=>a.done===b.done?0:a.done?1:-1);
   const linkedGoal=goals.find(g=>g.id===project.goalId);
+  const linkedClient=(clients||[]).find(c=>c.id===project.clientId);
   const pct=linkedGoal?computeGoalProgress(linkedGoal,tasks):null;
+  const pNotes=(projectNotes||[]).filter(n=>n.projectId===project.id).sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||""));
 
   useEffect(()=>{setNotes(project.notes||"");},[project.id]);
   const saveNotes=()=>{onUpdateProject({...project,notes});toast("Notas salvas");};
-  const addT=()=>{if(!newTask.trim())return;onAddTask({id:uid(),title:newTask,projectId:project.id,priority:prio,dueDate:due,notes:"",done:false,goalId:project.goalId||null,createdAt:new Date().toISOString()});setNewTask("");setDue("");toast("Task criada");};
+  const addT=()=>{if(!newTask.trim())return;onAddTask({id:uid(),title:newTask,projectId:project.id,priority:prio,dueDate:due,notes:"",done:false,goalId:project.goalId||null,isRecurring:false,frequency:"",nextDue:"",createdAt:new Date().toISOString()});setNewTask("");setDue("");toast("Task criada");};
+  const addNote=()=>{if(!newNoteTit.trim())return;onAddNote({id:uid(),title:newNoteTit,content:"",projectId:project.id,category:"Geral",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});setNewNoteTit("");toast("Nota criada");};
+
+  const catColor={"Reunião":"#1a5276","Decisão":"#c0392b","Referência":"#d68910","Geral":"#888"};
 
   return(
     <div>
       <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:"#888",fontSize:13,padding:"0 0 16px",display:"flex",alignItems:"center",gap:6,fontFamily:"inherit"}}>← Projetos</button>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
         <div>
-          <div style={{display:"flex",gap:8,marginBottom:6,alignItems:"center"}}><AreaBadge area={project.area}/><span style={{fontSize:12,color:"#888"}}>{project.status==="doing"?"Em andamento":project.status==="todo"?"A fazer":"Concluído"}</span></div>
+          <div style={{display:"flex",gap:8,marginBottom:6,alignItems:"center",flexWrap:"wrap"}}>
+            <AreaBadge area={project.area}/>
+            <span style={{fontSize:12,color:"#888"}}>{project.status==="doing"?"Em andamento":project.status==="todo"?"A fazer":"Concluído"}</span>
+            {linkedClient&&<span style={{fontSize:10,fontWeight:600,color:"#1a5276",background:"#eaf2fb",padding:"2px 6px",borderRadius:4}}>◇ {linkedClient.name}</span>}
+          </div>
           <h2 style={{margin:0,fontSize:22,fontWeight:700,letterSpacing:"-0.3px"}}>{project.name}</h2>
           {project.description&&<p style={{margin:"4px 0 0",fontSize:13,color:"#888"}}>{project.description}</p>}
         </div>
@@ -50,14 +61,32 @@ export default function ProjectPage({project,tasks,goals,onBack,onUpdateProject,
             <TaskRow key={t.id} task={t} onToggle={()=>onToggleTask(t.id)} onDelete={()=>onDeleteTask(t.id)}/>
           ))}
         </div>
-        <div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <SLabel>Notas do projeto</SLabel>
-            <Btn variant="ghost" sm onClick={saveNotes}>Salvar</Btn>
+        <div style={{display:"flex",flexDirection:"column",gap:20}}>
+          {/* Quick notes */}
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <SLabel style={{margin:0}}>Notas rápidas</SLabel>
+              <Btn variant="ghost" sm onClick={saveNotes}>Salvar</Btn>
+            </div>
+            <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Contexto, decisões, links…"
+              style={{...IS,resize:"none",lineHeight:1.7,minHeight:140,fontSize:13}}/>
           </div>
-          <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Contexto, decisões, próximos passos, links relevantes…"
-            style={{...IS,resize:"none",lineHeight:1.7,minHeight:320,fontSize:13}}/>
-          <p style={{fontSize:11,color:"#ccc",marginTop:6}}>Clique em "Salvar" para persistir</p>
+          {/* Structured notes */}
+          <div>
+            <SLabel>Notas do projeto ({pNotes.length})</SLabel>
+            <div style={{display:"flex",gap:6,marginBottom:10}}>
+              <Inp value={newNoteTit} onChange={e=>setNewNoteTit(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addNote()} placeholder="Nova nota…" style={{flex:1,fontSize:12}}/>
+              <Btn sm onClick={addNote}>+</Btn>
+            </div>
+            {pNotes.map(n=>(
+              <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #f5f4f1"}}>
+                <span style={{fontSize:10,color:catColor[n.category]||"#888",fontWeight:600,minWidth:50}}>{n.category}</span>
+                <span style={{fontSize:12,color:"#555",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.title||"Sem título"}</span>
+                <span style={{fontSize:10,color:"#ccc"}}>{new Date(n.updatedAt).toLocaleDateString("pt-BR")}</span>
+                <button onClick={()=>{if(window.confirm("Excluir nota?"))onDeleteNote(n.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"#ddd",fontSize:13,padding:"0 2px"}}>×</button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

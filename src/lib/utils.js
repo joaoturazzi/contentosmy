@@ -17,3 +17,13 @@ export function computeGoalProgress(goal, tasks=[]) {
 
 export const blankGoal=(cats)=>({id:uid(),title:"",description:"",category:cats[0],status:"ativo",progress:0,deadline:"",progressMode:"manual",keyResults:[],createdAt:new Date().toISOString()});
 export const blankKR=()=>({id:uid(),title:"",current:0,target:100,unit:""});
+
+export function calcNextDue(currentDate, frequency) {
+  const d = new Date((currentDate||today())+'T12:00');
+  if(frequency==='daily') d.setDate(d.getDate()+1);
+  else if(frequency==='weekly') d.setDate(d.getDate()+7);
+  else if(frequency==='biweekly') d.setDate(d.getDate()+14);
+  else if(frequency==='monthly') d.setMonth(d.getMonth()+1);
+  else d.setDate(d.getDate()+7);
+  return dateStr(d);
+}

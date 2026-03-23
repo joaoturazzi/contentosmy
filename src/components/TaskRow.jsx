@@ -16,6 +16,7 @@ export default function TaskRow({task,onToggle,onDelete,onEdit,project,showProje
             {task.channel&&<ChipBadge ch={task.channel}/>}
             {showProject&&project&&<><AreaBadge area={project.area}/><span style={{fontSize:11,color:"#aaa",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"inline-block",verticalAlign:"middle"}}>{project.name}</span></>}
             {task.dueDate&&<span style={{fontSize:11,color:late?"#c0392b":"#bbb"}}>{late?"Atrasada · ":""}{fmtD(task.dueDate)}</span>}
+            {task.isRecurring&&<span style={{fontSize:10,color:"#8e44ad",fontWeight:600}}>↻</span>}
             {task.notes&&<span style={{fontSize:11,color:"#ccc"}}>• nota</span>}
           </div>
         </div>

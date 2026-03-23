@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { Modal, FormRow, Inp, Sel, Txa, Btn, FPill, Empty, toast } from '../ui';
-import { AREA_C } from '@/lib/constants';
-import { uid, today, dateStr } from '@/lib/utils';
+import { AREA_C, FREQ } from '@/lib/constants';
+import { uid, today, dateStr, calcNextDue } from '@/lib/utils';
 import TaskRow from '../TaskRow';
 
 export default function W2Tasks({w2,setW2}){
@@ -12,10 +12,18 @@ export default function W2Tasks({w2,setW2}){
   const [draft,setDraft]=useState({});
   const [sf,setSf]=useState("pendentes");
   const [pf,setPf]=useState("todos");
-  const newT=()=>({id:uid(),title:"",projectId:"",priority:"media",dueDate:"",notes:"",done:false,goalId:null,createdAt:new Date().toISOString()});
+  const newT=()=>({id:uid(),title:"",projectId:"",priority:"media",dueDate:"",notes:"",done:false,goalId:null,isRecurring:false,frequency:"weekly",nextDue:"",createdAt:new Date().toISOString()});
   const openEdit=t=>{setDraft({...t});setModal(t.id);};
   const save=()=>{if(!draft.title?.trim())return;setW2(d=>({...d,tasks:modal==="new"?[draft,...d.tasks]:d.tasks.map(t=>t.id===modal?draft:t)}));setModal(null);toast(modal==="new"?"Task criada":"Task atualizada");};
-  const toggle=id=>setW2(d=>({...d,tasks:d.tasks.map(t=>t.id===id?{...t,done:!t.done}:t)}));
+  const toggle=id=>setW2(d=>{
+    const t=d.tasks.find(x=>x.id===id);if(!t)return d;
+    if(t.isRecurring&&!t.done){
+      const nd=calcNextDue(t.dueDate||today(),t.frequency);
+      const clone={...t,id:uid(),done:false,dueDate:nd,nextDue:nd,createdAt:new Date().toISOString()};
+      return{...d,tasks:[...d.tasks.map(x=>x.id===id?{...x,done:true}:x),clone]};
+    }
+    return{...d,tasks:d.tasks.map(x=>x.id===id?{...x,done:!x.done}:x)};
+  });
   const del=id=>{if(!window.confirm("Excluir?"))return;setW2(d=>({...d,tasks:d.tasks.filter(t=>t.id!==id)}));toast("Task excluída");};
   const visible=tasks.filter(t=>{const s=sf==="pendentes"?!t.done:sf==="concluídas"?t.done:true;const p=pf==="todos"||t.projectId===pf;return s&&p;}).sort((a,b)=>{if(a.done!==b.done)return a.done?1:-1;const td2=today();const aL=a.dueDate&&a.dueDate<td2?0:1;const bL=b.dueDate&&b.dueDate<td2?0:1;if(aL!==bL)return aL-bL;const pd={alta:0,media:1,baixa:2};return(pd[a.priority]||1)-(pd[b.priority]||1)||((a.dueDate||"9")<(b.dueDate||"9")?-1:1);});
   return(
@@ -46,6 +54,8 @@ export default function W2Tasks({w2,setW2}){
           </div>
           <FormRow label="Meta vinculada"><Sel value={draft.goalId||""} onChange={e=>setDraft(d=>({...d,goalId:e.target.value||null}))} style={{width:"100%"}}><option value="">— sem meta —</option>{w2.goals.map(g=><option key={g.id} value={g.id}>{g.title.slice(0,40)}</option>)}</Sel></FormRow>
           <FormRow label="Notas"><Txa value={draft.notes||""} onChange={e=>setDraft(d=>({...d,notes:e.target.value}))} rows={2} placeholder="Contexto, links…"/></FormRow>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#555",cursor:"pointer"}}><input type="checkbox" checked={draft.isRecurring||false} onChange={()=>setDraft(d=>({...d,isRecurring:!d.isRecurring}))} style={{width:14,height:14,cursor:"pointer"}}/>Tarefa recorrente</label>
+          {draft.isRecurring&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><FormRow label="Frequência"><Sel value={draft.frequency||"weekly"} onChange={e=>setDraft(d=>({...d,frequency:e.target.value}))} style={{width:"100%"}}>{Object.entries(FREQ).map(([k,v])=><option key={k} value={k}>{v}</option>)}</Sel></FormRow><FormRow label="Próximo vencimento"><Inp type="date" value={draft.nextDue||""} onChange={e=>setDraft(d=>({...d,nextDue:e.target.value}))}/></FormRow></div>}
           <div style={{display:"flex",justifyContent:"flex-end",gap:8}}><Btn variant="ghost" onClick={()=>setModal(null)}>Cancelar</Btn><Btn onClick={save}>Salvar</Btn></div>
         </div>
       </Modal>

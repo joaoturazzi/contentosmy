@@ -10,7 +10,7 @@ export default function CommandPalette({open,onClose,ws,setWs,setW1Page,setW2Pag
   const lq=q.toLowerCase();
 
   const w1Pages=[["home","Visão Geral"],["goals","Metas"],["tasks","Tasks"],["calendar","Calendário"],["ideas","Ideias"],["notes","Notas"],["guests","Convidados"]];
-  const w2Pages=[["home","Visão Geral"],["projects","Projetos"],["tasks","Tasks"],["goals","Metas"],["content","Conteúdo"],["tools","Ferramentas"]];
+  const w2Pages=[["home","Visão Geral"],["projects","Projetos"],["clients","Clientes"],["tasks","Tasks"],["personal","Pessoal"],["goals","Metas"],["content","Conteúdo"],["notes","Notas"],["tools","Ferramentas"]];
 
   if(!q||"conteúdo content".includes(lq)){results.push({id:"ws1",icon:"C",label:"Ir para Content OS",sub:"Workspace 1",action:()=>{setWs("content");onClose();}});}
   if(!q||"business projetos".includes(lq)){results.push({id:"ws2",icon:"B",label:"Ir para One Person Business",sub:"Workspace 2",action:()=>{setWs("opb");onClose();}});}
@@ -30,6 +30,8 @@ export default function CommandPalette({open,onClose,ws,setWs,setW1Page,setW2Pag
   if(!q||"novo projeto".includes(lq)) results.push({id:"new-proj",icon:"+",label:"Novo Projeto",sub:"Criar",action:()=>{onClose();setWs("opb");setW2Page("projects");openQuick("project");}});
   if(!q||"nova meta objetivo".includes(lq)) results.push({id:"new-goal",icon:"+",label:"Nova Meta",sub:"Criar",action:()=>{onClose();openQuick("goal");}});
   if(!q||"novo convidado guest".includes(lq)) results.push({id:"new-guest",icon:"+",label:"Novo Convidado",sub:"Criar",action:()=>{onClose();openQuick("guest");}});
+  if(!q||"novo cliente crm".includes(lq)) results.push({id:"new-client",icon:"+",label:"Novo Cliente",sub:"Criar",action:()=>{onClose();setWs("opb");openQuick("client");}});
+  if(!q||"tarefa pessoal personal".includes(lq)) results.push({id:"new-personal",icon:"+",label:"Tarefa Pessoal",sub:"Criar",action:()=>{onClose();setWs("opb");openQuick("personal");}});
 
   if(q) w2.projects.filter(p=>p.name.toLowerCase().includes(lq)).forEach(p=>{
     results.push({id:"proj-"+p.id,icon:"⬡",label:p.name,sub:`Projeto · ${p.area}`,action:()=>{setWs("opb");setW2Page("projects_"+p.id);onClose();}});
@@ -49,6 +51,9 @@ export default function CommandPalette({open,onClose,ws,setWs,setW1Page,setW2Pag
   });
   if(q) (w1.guests||[]).filter(g=>g.name.toLowerCase().includes(lq)||(g.company||"").toLowerCase().includes(lq)).slice(0,3).forEach(g=>{
     results.push({id:"guest-"+g.id,icon:"◇",label:g.name,sub:`Convidado${g.company?" · "+g.company:""}`,action:()=>{setWs("content");setW1Page("guests");onClose();}});
+  });
+  if(q) (w2.clients||[]).filter(c=>c.name.toLowerCase().includes(lq)||(c.company||"").toLowerCase().includes(lq)).slice(0,3).forEach(c=>{
+    results.push({id:"client-"+c.id,icon:"◇",label:c.name,sub:`Cliente${c.company?" · "+c.company:""}`,action:()=>{setWs("opb");setW2Page("clients");onClose();}});
   });
 
   const visible=results.slice(0,10);
