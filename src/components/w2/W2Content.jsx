@@ -47,8 +47,10 @@ export default function W2Content({w2,setW2}){
                 <div key={c.id} style={{background:"#fff",border:"1px solid #eceae5",borderRadius:6,padding:"10px",marginBottom:6}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
                     <div style={{display:"flex",gap:4}}><ChipBadge ch={c.channel}/><span style={{fontSize:10,color:"#bbb",alignSelf:"center"}}>{c.type}</span></div>
-                    <button onClick={()=>openEdit(c)} style={{background:"none",border:"none",cursor:"pointer",color:"#e0e0de",fontSize:11,padding:0}} title="Editar">✎</button>
-                    <button onClick={()=>del(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#e0e0de",fontSize:12,padding:0,marginLeft:2}}>×</button>
+                    <div style={{display:"flex",gap:2,flexShrink:0}}>
+                      <button onClick={()=>openEdit(c)} style={{background:"none",border:"none",cursor:"pointer",color:"#e0e0de",fontSize:11,padding:"0 2px"}} title="Editar">✎</button>
+                      <button onClick={()=>del(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#e0e0de",fontSize:12,padding:"0 2px"}}>×</button>
+                    </div>
                   </div>
                   <p style={{margin:"0 0 5px",fontSize:12,fontWeight:600,lineHeight:1.3}}>{c.title}</p>
                   {c.description&&<p style={{margin:"0 0 5px",fontSize:11,color:"#888",lineHeight:1.4}}>{c.description.slice(0,55)}{c.description.length>55?"…":""}</p>}

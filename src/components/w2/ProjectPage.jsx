@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { SLabel, AreaBadge, Inp, Sel, Btn, PBar, Empty, IS } from '../ui';
+import { SLabel, AreaBadge, Inp, Sel, Btn, PBar, Empty, IS, toast } from '../ui';
 import { uid, computeGoalProgress } from '@/lib/utils';
 import TaskRow from '../TaskRow';
 
@@ -15,8 +15,8 @@ export default function ProjectPage({project,tasks,goals,onBack,onUpdateProject,
   const pct=linkedGoal?computeGoalProgress(linkedGoal,tasks):null;
 
   useEffect(()=>{setNotes(project.notes||"");},[project.id]);
-  const saveNotes=()=>onUpdateProject({...project,notes});
-  const addT=()=>{if(!newTask.trim())return;onAddTask({id:uid(),title:newTask,projectId:project.id,priority:prio,dueDate:due,notes:"",done:false,goalId:project.goalId||null,createdAt:new Date().toISOString()});setNewTask("");setDue("");};
+  const saveNotes=()=>{onUpdateProject({...project,notes});toast("Notas salvas");};
+  const addT=()=>{if(!newTask.trim())return;onAddTask({id:uid(),title:newTask,projectId:project.id,priority:prio,dueDate:due,notes:"",done:false,goalId:project.goalId||null,createdAt:new Date().toISOString()});setNewTask("");setDue("");toast("Task criada");};
 
   return(
     <div>
