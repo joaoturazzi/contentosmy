@@ -21,7 +21,10 @@ async function migrate() {
   }
 
   const sql = neon(process.env.DATABASE_URL);
-  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
+  const schemaFiles = ['schema.sql', 'schema-w3.sql'];
+  const schema = schemaFiles
+    .map(f => { try { return fs.readFileSync(path.join(__dirname, f), 'utf-8'); } catch { return ''; } })
+    .join('\n');
 
   // Strip comment lines then split by semicolons
   const cleaned = schema.split('\n').filter(line => !line.trim().startsWith('--')).join('\n');

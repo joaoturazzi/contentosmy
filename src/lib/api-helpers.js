@@ -25,6 +25,20 @@ const TABLE_CONFIG = {
   w2_clients:  { columns: ['id','name','company','contact','email','phone','area','deal_value','status','notes','created_at'], order: 'created_at DESC' },
   w2_notes:    { columns: ['id','title','content','project_id','category','created_at','updated_at'], order: 'updated_at DESC' },
   w2_personal: { columns: ['id','title','done','date','notes','created_at'], order: 'date ASC, created_at ASC' },
+  // W3: Finance
+  fin_categories:       { columns: ['id','name','type','color','icon','is_fixed','is_business','created_at'], order: 'name ASC' },
+  fin_income_sources:   { columns: ['id','name','expected_amount','actual_amount','month','year','funded_by','notes','received_at','created_at'], order: 'year DESC, month DESC' },
+  fin_fixed_costs:      { columns: ['id','name','amount','category_id','payment_method','card_name','card_id','due_day','is_active','is_business','funded_by','remaining_installments','total_remaining_debt','end_date','notes','created_at'], order: 'name ASC' },
+  fin_fixed_payments:   { columns: ['id','fixed_cost_id','month','year','budgeted_amount','paid_amount','status','paid_at','notes','created_at'], order: 'year DESC, month DESC' },
+  fin_transactions:     { columns: ['id','description','merchant','amount','type','category_id','payment_method','card_name','card_id','transaction_date','month','year','is_fixed','is_business','fixed_cost_id','source','external_id','notes','created_by','created_at'], order: 'transaction_date DESC, created_at DESC' },
+  fin_emergency_reserve:{ columns: ['id','month','year','saved_amount','accumulated_total','target_phase_1','target_phase_2','target_final','notes','created_at'], order: 'year ASC, month ASC' },
+  fin_monthly_budgets:  { columns: ['id','month','year','category_id','budgeted_amount','notes','created_at'], order: 'year DESC, month DESC' },
+  fin_credit_cards:     { columns: ['id','name','last_four','bank','credit_limit','closing_day','due_day','expected_monthly_bill','color','is_active','created_at'], order: 'name ASC' },
+  fin_card_bills:       { columns: ['id','card_id','month','year','total_amount','paid_amount','status','due_date','paid_at','notes','created_at'], order: 'year DESC, month DESC' },
+  fin_installments:     { columns: ['id','description','total_amount','installment_amount','total_installments','paid_installments','remaining_installments','start_date','end_date','card_id','category_id','is_active','notes','created_at'], order: 'end_date ASC' },
+  fin_debts:            { columns: ['id','name','creditor','original_amount','remaining_amount','monthly_payment','interest_rate','remaining_installments','next_due_date','payment_method','is_active','notes','created_at'], order: 'remaining_amount DESC' },
+  fin_goals:            { columns: ['id','name','target_amount','current_amount','target_date','category','color','is_achieved','notes','created_at'], order: 'created_at DESC' },
+  fin_alerts:           { columns: ['id','type','title','message','due_date','amount','is_read','is_dismissed','created_at'], order: 'created_at DESC' },
 };
 
 // ── Resolve table name ───────────────────────────────────────────
@@ -128,3 +142,4 @@ export function createEntityHandler(workspace, entity) {
 
 export const VALID_W1_ENTITIES = ['tasks', 'ideas', 'notes', 'events', 'goals', 'guests'];
 export const VALID_W2_ENTITIES = ['projects', 'tasks', 'goals', 'content', 'tools', 'clients', 'notes', 'personal'];
+export const VALID_FIN_ENTITIES = ['categories', 'income_sources', 'fixed_costs', 'fixed_payments', 'transactions', 'emergency_reserve', 'monthly_budgets', 'credit_cards', 'card_bills', 'installments', 'debts', 'goals', 'alerts'];

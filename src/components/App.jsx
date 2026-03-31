@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useDatabaseSync } from '@/lib/sync';
-import { CH, AREA_C, AREAS, W1_NAV, W2_NAV, WS } from '@/lib/constants';
+import { CH, AREA_C, AREAS, W1_NAV, W2_NAV, W3_NAV, WS, FIN_FUNDED } from '@/lib/constants';
 import { today } from '@/lib/utils';
 
 import { UserButton } from '@clerk/nextjs';
@@ -27,14 +27,29 @@ import W2Clients from './w2/W2Clients';
 import W2Notes from './w2/W2Notes';
 import W2Personal from './w2/W2Personal';
 
+import W3Dashboard from './w3/W3Dashboard';
+import W3Mensal from './w3/W3Mensal';
+import W3Gastos from './w3/W3Gastos';
+import W3Fixos from './w3/W3Fixos';
+import W3Projecao from './w3/W3Projecao';
+import W3Reserva from './w3/W3Reserva';
+import W3Config from './w3/W3Config';
+import W3Cartoes from './w3/W3Cartoes';
+import W3Parcelas from './w3/W3Parcelas';
+import W3Dividas from './w3/W3Dividas';
+import W3Calendario from './w3/W3Calendario';
+import W3Importar from './w3/W3Importar';
+
 const W1_ENTITIES = ['tasks', 'ideas', 'notes', 'events', 'goals', 'guests'];
 const W2_ENTITIES = ['projects', 'tasks', 'goals', 'content', 'tools', 'clients', 'notes', 'personal'];
+const W3_ENTITIES = ['categories', 'income_sources', 'fixed_costs', 'fixed_payments', 'transactions', 'emergency_reserve', 'monthly_budgets', 'credit_cards', 'card_bills', 'installments', 'debts', 'goals', 'alerts'];
 
 export default function App(){
   const [ws,setWs]=useState("content");
   const [wsOpen,setWsOpen]=useState(false);
   const [w1Page,setW1Page]=useState("home");
   const [w2Page,setW2PageRaw]=useState("home");
+  const [w3Page,setW3Page]=useState("home");
   const [openProject,setOpenProject]=useState(null);
 
   // Command palette & quick capture
@@ -45,6 +60,7 @@ export default function App(){
   // Database-synced state
   const [w1, setW1, w1Loaded] = useDatabaseSync('w1', W1_ENTITIES, {tasks:[],ideas:[],notes:[],events:[],goals:[],guests:[]});
   const [w2, setW2, w2Loaded] = useDatabaseSync('w2', W2_ENTITIES, {projects:[],tasks:[],goals:[],content:[],tools:[],clients:[],notes:[],personal:[]});
+  const [w3, setW3, w3Loaded] = useDatabaseSync('w3', W3_ENTITIES, {categories:[],income_sources:[],fixed_costs:[],fixed_payments:[],transactions:[],emergency_reserve:[],monthly_budgets:[],credit_cards:[],card_bills:[],installments:[],debts:[],goals:[],alerts:[]});
 
   const setW2Page=useCallback(p=>{if(p.startsWith("projects_")){setW2PageRaw("projects");setOpenProject(p.replace("projects_",""));}else{setW2PageRaw(p);setOpenProject(null);}},[]);
 
@@ -58,10 +74,10 @@ export default function App(){
   },[]);
 
   const openQuick=(type)=>{setQuickType(type);setQuickOpen(true);};
-  const page=ws==="content"?w1Page:w2Page;
-  const nav=ws==="content"?W1_NAV:W2_NAV;
-  const pending=ws==="content"?w1.tasks.filter(t=>!t.done).length:w2.tasks.filter(t=>!t.done).length;
-  const overdue=ws==="content"?w1.tasks.filter(t=>!t.done&&t.dueDate&&t.dueDate<today()).length:w2.tasks.filter(t=>!t.done&&t.dueDate&&t.dueDate<today()).length;
+  const page=ws==="content"?w1Page:ws==="opb"?w2Page:w3Page;
+  const nav=ws==="content"?W1_NAV:ws==="opb"?W2_NAV:W3_NAV;
+  const pending=ws==="content"?w1.tasks.filter(t=>!t.done).length:ws==="opb"?w2.tasks.filter(t=>!t.done).length:0;
+  const overdue=ws==="content"?w1.tasks.filter(t=>!t.done&&t.dueDate&&t.dueDate<today()).length:ws==="opb"?w2.tasks.filter(t=>!t.done&&t.dueDate&&t.dueDate<today()).length:0;
   const curWs=WS.find(w=>w.id===ws);
 
   return(
@@ -105,7 +121,7 @@ export default function App(){
           {/* Nav */}
           <nav style={{flex:1}}>
             {nav.map(item=>(
-              <button key={item.id} className="nav-btn" onClick={()=>{setWsOpen(false);ws==="content"?setW1Page(item.id):(item.id==="projects"?setOpenProject(null):null,setW2Page(item.id));}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"6px 8px",borderRadius:6,cursor:"pointer",border:"none",textAlign:"left",background:page===item.id?"#ebe9e4":"transparent",color:page===item.id?"#1a1a1a":"#555",fontSize:13,fontWeight:page===item.id?700:400,fontFamily:"inherit",marginBottom:1,transition:"background .08s"}}>
+              <button key={item.id} className="nav-btn" onClick={()=>{setWsOpen(false);ws==="content"?setW1Page(item.id):ws==="opb"?(item.id==="projects"?setOpenProject(null):null,setW2Page(item.id)):setW3Page(item.id);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"6px 8px",borderRadius:6,cursor:"pointer",border:"none",textAlign:"left",background:page===item.id?"#ebe9e4":"transparent",color:page===item.id?"#1a1a1a":"#555",fontSize:13,fontWeight:page===item.id?700:400,fontFamily:"inherit",marginBottom:1,transition:"background .08s"}}>
                 <span style={{fontSize:11,opacity:0.55}}>{item.icon}</span>
                 {item.label}
                 {item.id==="tasks"&&overdue>0&&<span style={{marginLeft:"auto",fontSize:10,background:"#fdf2f2",color:"#c0392b",padding:"1px 5px",borderRadius:10,fontWeight:700}}>{overdue}</span>}
@@ -118,7 +134,7 @@ export default function App(){
           <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid #eceae5"}}>
             <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,letterSpacing:"0.09em",color:"#ccc",textTransform:"uppercase",paddingLeft:8}}>Quick add</p>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-              {(ws==="content"?[["task","Task"],["idea","Ideia"],["note","Nota"],["goal","Meta"]]:[["task","Task"],["project","Projeto"],["goal","Meta"],["content","Conteúdo"]]).map(([t,l])=>(
+              {(ws==="content"?[["task","Task"],["idea","Ideia"],["note","Nota"],["goal","Meta"]]:ws==="opb"?[["task","Task"],["project","Projeto"],["goal","Meta"],["content","Conteúdo"]]:[["gasto","Gasto"],["fixo","Custo Fixo"]]).map(([t,l])=>(
                 <button key={t} onClick={()=>{setWsOpen(false);openQuick(t);}} style={{fontSize:11,padding:"5px 8px",borderRadius:5,cursor:"pointer",background:"transparent",border:"1px solid #e5e4e0",color:"#888",fontFamily:"inherit",fontWeight:500,textAlign:"center",transition:"background .08s"}}>+ {l}</button>
               ))}
             </div>
@@ -126,10 +142,12 @@ export default function App(){
 
           {/* Areas / Channels */}
           <div style={{paddingTop:14,marginTop:8,borderTop:"1px solid #eceae5"}}>
-            <p style={{margin:"0 0 6px",fontSize:10,fontWeight:700,letterSpacing:"0.09em",color:"#ccc",textTransform:"uppercase",paddingLeft:8}}>{ws==="content"?"Canais":"Áreas"}</p>
+            <p style={{margin:"0 0 6px",fontSize:10,fontWeight:700,letterSpacing:"0.09em",color:"#ccc",textTransform:"uppercase",paddingLeft:8}}>{ws==="content"?"Canais":ws==="opb"?"Áreas":"Fontes"}</p>
             {ws==="content"
               ?Object.entries(CH).slice(0,3).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:v.color,flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{v.label}</span></div>)
-              :AREAS.map(a=><div key={a} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:AREA_C[a].color,flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{a}</span></div>)
+              :ws==="opb"
+              ?AREAS.map(a=><div key={a} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:AREA_C[a].color,flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{a}</span></div>)
+              :Object.entries(FIN_FUNDED).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:k==="renda_principal"?"#0F9B58":k==="entrada_mazul"?"#2196F3":"#00BCD4",flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{v}</span></div>)
             }
           </div>
 
@@ -170,6 +188,25 @@ export default function App(){
             </>
           )}
           {ws==="opb"&&!w2Loaded&&<p style={{color:"#bbb",fontSize:13}}>Carregando…</p>}
+
+          {/* W3 Finance */}
+          {ws==="finance"&&w3Loaded&&(
+            <>
+              {w3Page==="home"&&<W3Dashboard w3={w3} setW3={setW3}/>}
+              {w3Page==="mensal"&&<W3Mensal w3={w3} setW3={setW3}/>}
+              {w3Page==="gastos"&&<W3Gastos w3={w3} setW3={setW3}/>}
+              {w3Page==="cartoes"&&<W3Cartoes w3={w3} setW3={setW3}/>}
+              {w3Page==="parcelas"&&<W3Parcelas w3={w3} setW3={setW3}/>}
+              {w3Page==="dividas"&&<W3Dividas w3={w3} setW3={setW3}/>}
+              {w3Page==="fixos"&&<W3Fixos w3={w3} setW3={setW3}/>}
+              {w3Page==="calendario"&&<W3Calendario w3={w3} setW3={setW3}/>}
+              {w3Page==="projecao"&&<W3Projecao w3={w3} setW3={setW3}/>}
+              {w3Page==="reserva"&&<W3Reserva w3={w3} setW3={setW3}/>}
+              {w3Page==="importar"&&<W3Importar/>}
+              {w3Page==="config"&&<W3Config w3={w3} setW3={setW3}/>}
+            </>
+          )}
+          {ws==="finance"&&!w3Loaded&&<p style={{color:"#bbb",fontSize:13}}>Carregando…</p>}
         </div>
       </div>
 

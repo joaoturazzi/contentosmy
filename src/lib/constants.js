@@ -31,6 +31,14 @@ export const CLIENT_NEXT={lead:"proposta",proposta:"negociacao",negociacao:"fech
 export const NOTE_CATS_W2=["Geral","Reunião","Decisão","Referência"];
 export const FREQ={daily:"Diário",weekly:"Semanal",biweekly:"Quinzenal",monthly:"Mensal"};
 
+// ── W3 constants (Finance) ──────────────────────────────────────
+export const FIN_PAY={debit:{label:"Débito",color:"#3498DB"},debit_auto:{label:"Débito Automático",color:"#2980B9"},credit_card:{label:"Cartão Crédito",color:"#9B59B6"},pix:{label:"PIX",color:"#1ABC9C"},boleto:{label:"Boleto",color:"#F39C12"}};
+export const FIN_ST={pending:{label:"Pendente",color:"#d68910",bg:"#fef9e7"},paid:{label:"Pago",color:"#1e8449",bg:"#eafaf1"},overdue:{label:"Atrasado",color:"#c0392b",bg:"#fdf2f2"}};
+export const FIN_BILL_ST={open:{label:"Aberta",color:"#3498DB",bg:"#eaf2fb"},closed:{label:"Fechada",color:"#d68910",bg:"#fef9e7"},paid:{label:"Paga",color:"#1e8449",bg:"#eafaf1"},overdue:{label:"Atrasada",color:"#c0392b",bg:"#fdf2f2"}};
+export const FIN_FUNDED={renda_principal:"Renda Principal",entrada_mazul:"Entrada Mazul",entrada_patagon:"Entrada Patagon"};
+export const FIN_TX_TYPES={income:{label:"Receita",color:"#0F9B58"},expense:{label:"Despesa",color:"#E74C3C"}};
+export const FIN_GOAL_CATS={emergency_reserve:"Reserva de Emergência",debt_payoff:"Quitação de Dívida",savings:"Poupança",custom:"Personalizada"};
+
 // ── Shared ───────────────────────────────────────────────────────
 export const MONTHS=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 export const WDAYS=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
@@ -38,4 +46,5 @@ export const WDAYS=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 // ── Nav & Workspaces ─────────────────────────────────────────────
 export const W1_NAV=[{id:"home",label:"Foco do Dia",icon:"◈"},{id:"goals",label:"Metas",icon:"◎"},{id:"tasks",label:"Tasks",icon:"✓"},{id:"calendar",label:"Calendário",icon:"◫"},{id:"ideas",label:"Ideias",icon:"✦"},{id:"notes",label:"Notas",icon:"☰"},{id:"guests",label:"Convidados",icon:"◇"}];
 export const W2_NAV=[{id:"home",label:"Foco do Dia",icon:"◈"},{id:"projects",label:"Projetos",icon:"⬡"},{id:"clients",label:"Clientes",icon:"◇"},{id:"tasks",label:"Tasks",icon:"✓"},{id:"personal",label:"Pessoal",icon:"○"},{id:"goals",label:"Metas",icon:"◎"},{id:"content",label:"Conteúdo",icon:"▷"},{id:"notes",label:"Notas",icon:"☰"},{id:"tools",label:"Ferramentas",icon:"⚙"}];
-export const WS=[{id:"content",label:"Content OS",sub:"YT · IG · LinkedIn",icon:"C"},{id:"opb",label:"One Person Business",sub:"Patagon · Mazul · Indie",icon:"B"}];
+export const W3_NAV=[{id:"home",label:"Dashboard",icon:"◈"},{id:"mensal",label:"Mensal",icon:"◫"},{id:"gastos",label:"Gastos Diários",icon:"○"},{id:"cartoes",label:"Cartões",icon:"▭"},{id:"parcelas",label:"Parcelas",icon:"⊞"},{id:"dividas",label:"Dívidas",icon:"⚑"},{id:"fixos",label:"Custos Fixos",icon:"⚙"},{id:"calendario",label:"Calendário",icon:"◫"},{id:"projecao",label:"Projeção 2026",icon:"▷"},{id:"reserva",label:"Reserva",icon:"◎"},{id:"importar",label:"Importar",icon:"↑"},{id:"config",label:"Configurações",icon:"☰"}];
+export const WS=[{id:"content",label:"Content OS",sub:"YT · IG · LinkedIn",icon:"C"},{id:"opb",label:"One Person Business",sub:"Patagon · Mazul · Indie",icon:"B"},{id:"finance",label:"Finance",sub:"Gestão Financeira",icon:"F"}];

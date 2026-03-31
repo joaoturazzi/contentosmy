@@ -18,6 +18,18 @@ export function computeGoalProgress(goal, tasks=[]) {
 export const blankGoal=(cats)=>({id:uid(),title:"",description:"",category:cats[0],status:"ativo",progress:0,deadline:"",progressMode:"manual",keyResults:[],createdAt:new Date().toISOString()});
 export const blankKR=()=>({id:uid(),title:"",current:0,target:100,unit:""});
 
+// ── Finance helpers ─────────────────────────────────────────────
+export const fmtBRL = v => {
+  const n = typeof v === 'string' ? parseFloat(v) : (v || 0);
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+export const fmtDateBR = d => {
+  if (!d) return '';
+  try { return new Date(d + 'T12:00').toLocaleDateString('pt-BR'); } catch { return d; }
+};
+export const curMonth = () => new Date().getMonth() + 1;
+export const curYear = () => new Date().getFullYear();
+
 export function calcNextDue(currentDate, frequency) {
   const d = new Date((currentDate||today())+'T12:00');
   if(frequency==='daily') d.setDate(d.getDate()+1);
