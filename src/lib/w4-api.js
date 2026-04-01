@@ -1,10 +1,38 @@
-// W4 API helpers — handles timeout, retries, and error extraction
+// W4 API helpers — direct browser calls to OpenRouter (no serverless timeout)
 
+// Call OpenRouter LLM directly from browser (bypasses Netlify timeout)
 export async function callLLM({ apiKey, model, messages, maxTokens }) {
+  // If we have a client-side API key, call OpenRouter directly (no timeout limit)
+  if (apiKey) {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'Contentos Visual OS',
+      },
+      body: JSON.stringify({
+        model: model || 'deepseek/deepseek-chat',
+        messages,
+        max_tokens: maxTokens || 4096,
+      }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      const msg = typeof data.error === 'string' ? data.error : data.error.message || JSON.stringify(data.error);
+      throw new Error(msg);
+    }
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error('Resposta vazia do modelo. Tente novamente.');
+    return content;
+  }
+
+  // Fallback: use server proxy (for env var keys — may timeout on Netlify)
   const res = await fetch('/api/w4/llm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ apiKey: apiKey || '', model, messages, maxTokens: maxTokens || 4096 }),
+    body: JSON.stringify({ apiKey: '', model, messages, maxTokens: maxTokens || 4096 }),
   });
   const data = await res.json();
   if (data.error) {
@@ -12,10 +40,11 @@ export async function callLLM({ apiKey, model, messages, maxTokens }) {
     throw new Error(msg);
   }
   const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Resposta vazia do modelo. Tente novamente.');
+  if (!content) throw new Error('Resposta vazia. Verifique se OPENROUTER_API_KEY esta configurada.');
   return content;
 }
 
+// Call Firecrawl via server proxy (needs server-side env var)
 export async function callScrape({ url, apiKey }) {
   const res = await fetch('/api/w4/scrape', {
     method: 'POST',
