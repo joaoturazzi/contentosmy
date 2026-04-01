@@ -5,6 +5,7 @@ import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_MODELS } from '@/lib/constants';
 import { buildSystemPrompt } from '@/lib/w4-system-prompt';
 import { callLLM } from '@/lib/w4-api';
+import { buildPreviewHTML, downloadHTML, cleanCode } from '@/lib/w4-preview';
 
 export default function W4Components({ w4, setW4 }) {
   const [desc, setDesc] = useState('');
@@ -13,7 +14,8 @@ export default function W4Components({ w4, setW4 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [previewId, setPreviewId] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewHtml, setPreviewHtml] = useState(null);
 
   const settings = w4.settings || [];
   const getKey = (k) => settings.find(s => s.key === k)?.value || '';
@@ -39,8 +41,13 @@ export default function W4Components({ w4, setW4 }) {
         ],
       });
 
+      const cleaned = cleanCode(code);
+      const html = buildPreviewHTML(cleaned, `UI: ${desc.slice(0, 40)}`);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(new Blob([html], { type: 'text/html' })));
+      setPreviewHtml(html);
+
       const outputId = uid();
-      setPreviewId(outputId);
       const output = { id: outputId, projectId, type: 'component', title: `UI: ${desc.slice(0, 40)}`, content: code, language: 'tsx', metadata: { vibe, theme }, createdAt: new Date().toISOString() };
       setW4(d => ({
         ...d,
@@ -77,17 +84,17 @@ export default function W4Components({ w4, setW4 }) {
         {error && !loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#c0392b', background: '#fdf2f2', padding: '8px 12px', borderRadius: 6 }}>{error}</p>}
       </Card>
 
-      {previewId && result && (
+      {previewUrl && result && (
         <Card style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <SLabel style={{ margin: 0 }}>Preview</SLabel>
             <div style={{ display: 'flex', gap: 8 }}>
-              <Btn sm onClick={() => window.open(`/api/w4/preview/${previewId}`, '_blank')}>Abrir</Btn>
-              <Btn sm variant="ghost" onClick={() => window.open(`/api/w4/download/${previewId}`, '_blank')}>Download</Btn>
+              <Btn sm onClick={() => { const w = window.open('', '_blank'); w.document.write(previewHtml); w.document.close(); }}>Abrir</Btn>
+              <Btn sm variant="ghost" onClick={() => downloadHTML(previewHtml, 'component.html')}>Download</Btn>
             </div>
           </div>
           <div style={{ border: '1px solid #eceae5', borderRadius: 8, overflow: 'hidden' }}>
-            <iframe src={`/api/w4/preview/${previewId}`} style={{ width: '100%', height: 500, border: 'none' }} title="Preview" sandbox="allow-scripts allow-same-origin" />
+            <iframe src={previewUrl} style={{ width: '100%', height: 500, border: 'none' }} title="Preview" sandbox="allow-scripts" />
           </div>
         </Card>
       )}

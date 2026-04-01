@@ -1,10 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, Inp, Sel, Btn, SLabel, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_MODELS } from '@/lib/constants';
 import { buildSystemPrompt } from '@/lib/w4-system-prompt';
 import { callLLM, callScrape, parseJSON, ensureUrl, safeHostname } from '@/lib/w4-api';
+import { buildPreviewHTML, downloadHTML, cleanCode } from '@/lib/w4-preview';
 
 export default function W4Rebirth({ w4, setW4 }) {
   const [url, setUrl] = useState('');
@@ -13,7 +14,11 @@ export default function W4Rebirth({ w4, setW4 }) {
   const [step, setStep] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [previewId, setPreviewId] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const iframeRef = useRef(null);
+
+  // Cleanup blob URL on unmount
+  useEffect(() => { return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }; }, [previewUrl]);
 
   const settings = w4.settings || [];
   const getKey = (k) => settings.find(s => s.key === k)?.value || '';
@@ -26,23 +31,14 @@ export default function W4Rebirth({ w4, setW4 }) {
     setStep('scraping');
     setError(null);
     setResult(null);
-    setPreviewId(null);
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
 
     const projectId = uid();
     const hostname = safeHostname(fullUrl);
-    const project = {
-      id: projectId, name: `Rebirth: ${hostname}`,
-      type: 'site_rebirth', status: 'scraping', inputUrl: fullUrl,
-      inputText: '', inputChannel: '', vibe,
-      brandBlueprint: {}, scrapedData: {}, outputContent: {},
-      errorMessage: '', notes: '', createdAt: new Date().toISOString(),
-    };
-    setW4(d => ({ ...d, projects: [project, ...d.projects] }));
 
     try {
       // Step 1: Scrape
       const { markdown, data: scrapeData } = await callScrape({ url: fullUrl, apiKey: getKey('firecrawl_api_key') });
-      setW4(d => ({ ...d, projects: d.projects.map(p => p.id === projectId ? { ...p, scrapedData: scrapeData, status: 'analyzing' } : p) }));
 
       // Step 2: Brand Analysis
       setStep('analyzing');
@@ -52,43 +48,57 @@ export default function W4Rebirth({ w4, setW4 }) {
         model: W4_MODELS.analysis,
         maxTokens: 3000,
         messages: [
-          { role: 'system', content: sysPrompt + `\n\nAnalyze this website. Output JSON: {sector, tone_of_voice:[3], color_palette:{primary,secondary,accent}, typography:{display_font,body_font}, sections:[{id,title,rewritten_content}], tagline, weaknesses:[]}. Target vibe: ${vibe}. JSON ONLY, no markdown.` },
+          { role: 'system', content: sysPrompt + `\n\nAnalyze this website. Output JSON: {sector, tone_of_voice:[3], color_palette:{primary,secondary,accent}, typography:{display_font,body_font}, sections:[{id,title,rewritten_content}], tagline, weaknesses:[]}. Vibe: ${vibe}. JSON ONLY.` },
           { role: 'user', content: `URL: ${fullUrl}\n\n${markdown.slice(0, 4000)}` },
         ],
       });
-
       const { parsed: blueprint } = parseJSON(analysisRaw);
       const bp = blueprint || { raw: analysisRaw };
-      setW4(d => ({ ...d, projects: d.projects.map(p => p.id === projectId ? { ...p, brandBlueprint: bp, status: 'generating' } : p) }));
 
-      // Step 3: Generate frontend (instruct to output FULL HTML, not just React)
+      // Step 3: Generate site
       setStep('generating');
-      const code = await callLLM({
+      const rawCode = await callLLM({
         apiKey: getKey('openrouter_api_key'),
         model: W4_MODELS.code,
         maxTokens: 6000,
         messages: [
-          { role: 'system', content: sysPrompt + `\n\nGenerate a COMPLETE React single-page site using the brand blueprint. Apply ${W4_VIBES[vibe]?.label || vibe} vibe. Output ONLY the JSX code (no imports, no export default). The code will run in a browser with React and Tailwind CDN. Use only React hooks (useState, useEffect). Use only Tailwind classes. Include ALL components inline as functions. Define a single App function at the end. COMPLETE code, no truncation.` },
-          { role: 'user', content: `Blueprint:\n${JSON.stringify(bp, null, 2).slice(0, 3000)}\n\nGenerate the complete site code.` },
+          { role: 'system', content: sysPrompt + `\n\nGenerate a COMPLETE single-page React site using the brand blueprint below. CRITICAL RULES:
+1. Output ONLY raw JSX code, NO markdown backticks, NO \`\`\`jsx wrapper
+2. Do NOT use import/export statements — code runs in browser with React CDN
+3. Use ONLY React hooks from destructured globals (useState, useEffect, useRef, useCallback)
+4. Use ONLY Tailwind CSS classes, no external CSS
+5. Define all components as regular functions (function Navbar() {}, function Hero() {}, etc.)
+6. End with a single function App() {} that composes all sections
+7. Apply ${W4_VIBES[vibe]?.label || vibe} vibe with premium agency quality
+8. Use real content from the blueprint, not placeholders
+9. Include hover states, transitions, responsive design
+10. COMPLETE code only — no truncation, no TODO comments` },
+          { role: 'user', content: `Brand Blueprint:\n${JSON.stringify(bp, null, 2).slice(0, 3000)}` },
         ],
       });
 
-      // Save output
+      // Build preview
+      const code = cleanCode(rawCode);
+      const html = buildPreviewHTML(code, `${hostname} — Rebuilt`);
+      const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+
+      // Save to state
       const outputId = uid();
       const output = { id: outputId, projectId, type: 'site_code', title: `${hostname} — Rebuilt (${W4_VIBES[vibe]?.label || vibe})`, content: code, language: 'tsx', metadata: { vibe, url: fullUrl }, createdAt: new Date().toISOString() };
-      setW4(d => ({
-        ...d,
-        projects: d.projects.map(p => p.id === projectId ? { ...p, outputContent: { code }, status: 'complete' } : p),
-        outputs: [output, ...d.outputs],
-      }));
+      const project = {
+        id: projectId, name: `Rebirth: ${hostname}`, type: 'site_rebirth', status: 'complete',
+        inputUrl: fullUrl, inputText: '', inputChannel: '', vibe,
+        brandBlueprint: bp, scrapedData: {}, outputContent: { code },
+        errorMessage: '', notes: '', createdAt: new Date().toISOString(),
+      };
+      setW4(d => ({ ...d, projects: [project, ...d.projects], outputs: [output, ...d.outputs] }));
 
-      setResult({ blueprint: bp, code });
-      setPreviewId(outputId);
+      setResult({ blueprint: bp, code, html });
+      setPreviewUrl(blobUrl);
       toast('Site Rebirth completo');
     } catch (err) {
       const msg = err.message || 'Erro desconhecido';
       setError(msg);
-      setW4(d => ({ ...d, projects: d.projects.map(p => p.id === projectId ? { ...p, status: 'error', errorMessage: msg } : p) }));
       toast('Erro: ' + msg.slice(0, 80));
     }
     setStep(null);
@@ -128,22 +138,27 @@ export default function W4Rebirth({ w4, setW4 }) {
         })}
       </div>
 
-      {/* Preview */}
-      {previewId && (
+      {/* PREVIEW — instant via blob URL */}
+      {previewUrl && (
         <Card style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <SLabel style={{ margin: 0 }}>Preview do site</SLabel>
             <div style={{ display: 'flex', gap: 8 }}>
-              <Btn sm onClick={() => window.open(`/api/w4/preview/${previewId}`, '_blank')}>Abrir em nova aba</Btn>
-              <Btn sm variant="ghost" onClick={() => window.open(`/api/w4/download/${previewId}`, '_blank')}>Download HTML</Btn>
+              <Btn sm onClick={() => {
+                const w = window.open('', '_blank');
+                w.document.write(result.html);
+                w.document.close();
+              }}>Abrir em nova aba</Btn>
+              <Btn sm variant="ghost" onClick={() => downloadHTML(result.html, `${safeHostname(url)}-rebirth.html`)}>Download HTML</Btn>
             </div>
           </div>
-          <div style={{ border: '1px solid #eceae5', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+          <div style={{ border: '1px solid #eceae5', borderRadius: 8, overflow: 'hidden', background: '#000' }}>
             <iframe
-              src={`/api/w4/preview/${previewId}`}
+              ref={iframeRef}
+              src={previewUrl}
               style={{ width: '100%', height: 600, border: 'none' }}
               title="Site Preview"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts"
             />
           </div>
         </Card>
