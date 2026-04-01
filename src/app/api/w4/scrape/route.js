@@ -9,10 +9,12 @@ export async function POST(request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { url, apiKey: bodyKey } = await request.json();
+    const { url, apiKey: clientKey } = await request.json();
     if (!url) return NextResponse.json({ error: 'URL is required' }, { status: 400 });
-    const apiKey = bodyKey || process.env.FIRECRAWL_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: 'Firecrawl API key is required' }, { status: 400 });
+
+    // Priority: env var > client-provided key
+    const apiKey = process.env.FIRECRAWL_API_KEY || clientKey;
+    if (!apiKey) return NextResponse.json({ error: 'FIRECRAWL_API_KEY not configured' }, { status: 400 });
 
     // Scrape
     const scrapeRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
@@ -20,6 +22,10 @@ export async function POST(request) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({ url, formats: ['markdown', 'html'] }),
     });
+    if (!scrapeRes.ok) {
+      const errBody = await scrapeRes.text();
+      return NextResponse.json({ error: `Firecrawl scrape error (${scrapeRes.status}): ${errBody}` }, { status: scrapeRes.status });
+    }
     const scrapeData = await scrapeRes.json();
 
     // Map
@@ -28,12 +34,9 @@ export async function POST(request) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({ url }),
     });
-    const mapData = await mapRes.json();
+    const mapData = mapRes.ok ? await mapRes.json() : { links: [] };
 
-    return NextResponse.json({
-      scrape: scrapeData,
-      map: mapData,
-    });
+    return NextResponse.json({ scrape: scrapeData, map: mapData });
   } catch (err) {
     console.error('[API] Firecrawl scrape error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

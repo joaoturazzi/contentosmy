@@ -9,9 +9,11 @@ export async function POST(request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { model, messages, apiKey: bodyKey, maxTokens } = await request.json();
-    const apiKey = bodyKey || process.env.OPENROUTER_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: 'OpenRouter API key is required' }, { status: 400 });
+    const { model, messages, apiKey: clientKey, maxTokens } = await request.json();
+
+    // Priority: env var > client-provided key
+    const apiKey = process.env.OPENROUTER_API_KEY || clientKey;
+    if (!apiKey) return NextResponse.json({ error: 'OPENROUTER_API_KEY not configured' }, { status: 400 });
     if (!messages?.length) return NextResponse.json({ error: 'Messages are required' }, { status: 400 });
 
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -28,6 +30,11 @@ export async function POST(request) {
         max_tokens: maxTokens || 4096,
       }),
     });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      return NextResponse.json({ error: `OpenRouter error (${res.status}): ${errBody}` }, { status: res.status });
+    }
 
     const data = await res.json();
     return NextResponse.json(data);

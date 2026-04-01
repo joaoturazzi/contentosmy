@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { Card, Inp, Txa, Sel, Btn, SLabel, Empty, toast } from '../ui';
+import { useState } from 'react';
+import { Card, Txa, Sel, Btn, SLabel, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_MODELS } from '@/lib/constants';
 import { buildSystemPrompt } from '@/lib/w4-system-prompt';
@@ -12,16 +12,17 @@ export default function W4Ads({ w4, setW4 }) {
   const [channel, setChannel] = useState('instagram');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-  const [envKeys, setEnvKeys] = useState({ openrouter: false });
+  const [error, setError] = useState(null);
 
   const settings = w4.settings || [];
-  const openrouterKey = settings.find(s => s.key === 'openrouter_api_key')?.value || '';
-
-  useEffect(() => { fetch('/api/w4/keys').then(r => r.json()).then(setEnvKeys).catch(() => {}); }, []);
+  const getKey = (k) => settings.find(s => s.key === k)?.value || '';
 
   const generate = async () => {
     if (!product.trim()) { toast('Descreva o produto/servico'); return; }
-    if (!openrouterKey && !envKeys.openrouter) { toast('Configure a OpenRouter API key'); return; }
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
 
     const projectId = uid();
     const project = {
@@ -32,28 +33,27 @@ export default function W4Ads({ w4, setW4 }) {
       errorMessage: '', notes: '', createdAt: new Date().toISOString(),
     };
     setW4(d => ({ ...d, projects: [project, ...d.projects] }));
-    setLoading(true);
 
     try {
-      // Creative concepts
       const res = await fetch('/api/w4/llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey: openrouterKey || '',
+          apiKey: getKey('openrouter_api_key'),
           model: W4_MODELS.creative,
           maxTokens: 4096,
           messages: [
             { role: 'system', content: buildSystemPrompt('ad_generator') + `\n\nTASK: Generate 3 ad concepts. Output JSON:
-{"concepts": [{"name": "Concept A - Emotional", "approach": "storytelling", "headline": "max 8 words", "subheadline": "max 15 words", "cta": "max 4 words", "caption": "120-180 chars + hashtags", "ab_variations": {"headline_b": "alt", "cta_b": "alt"}, "linkedin_version": "professional tone adaptation", "instagram_version": "visual/emotional adaptation", "video_script": [{"time": "0s-2s", "visual": "desc", "text_overlay": "if any", "transition": "type"}], "image_prompt": "detailed FLUX prompt with aspect ratio"}]}
-3 concepts: A-Emotional (storytelling), B-Rational (problem>solution>proof), C-Disruptive (pattern interrupt). Channel: ${CHANNELS[channel]}.` },
+{"concepts": [{"name": "Concept A - Emotional", "approach": "storytelling", "headline": "max 8 words", "subheadline": "max 15 words", "cta": "max 4 words", "caption": "120-180 chars + hashtags", "ab_variations": {"headline_b": "alt", "cta_b": "alt"}, "linkedin_version": "professional adaptation", "instagram_version": "visual/emotional adaptation", "video_script": [{"time": "0s-2s", "visual": "desc", "text_overlay": "text", "transition": "type"}], "image_prompt": "detailed FLUX prompt"}]}
+3 concepts: A-Emotional (storytelling), B-Rational (problem>solution>proof), C-Disruptive (pattern interrupt). Channel: ${CHANNELS[channel]}. Output ONLY valid JSON.` },
             { role: 'user', content: `Product/Service: ${product}\nChannel: ${CHANNELS[channel]}` },
           ],
         }),
       });
       const data = await res.json();
-      const raw = data.choices?.[0]?.message?.content || '';
+      if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error.message || 'Generation failed');
 
+      const raw = data.choices?.[0]?.message?.content || '';
       let concepts = { concepts: [] };
       try {
         const match = raw.match(/\{[\s\S]*\}/);
@@ -78,8 +78,10 @@ export default function W4Ads({ w4, setW4 }) {
       setResult(concepts);
       toast('Conceitos gerados');
     } catch (err) {
-      setW4(d => ({ ...d, projects: d.projects.map(p => p.id === projectId ? { ...p, status: 'error', errorMessage: err.message } : p) }));
-      toast('Erro: ' + err.message);
+      const msg = err.message || 'Erro desconhecido';
+      setError(msg);
+      setW4(d => ({ ...d, projects: d.projects.map(p => p.id === projectId ? { ...p, status: 'error', errorMessage: msg } : p) }));
+      toast('Erro: ' + msg);
     }
     setLoading(false);
   };
@@ -98,7 +100,11 @@ export default function W4Ads({ w4, setW4 }) {
           </Sel>
           <Btn onClick={generate} style={{ opacity: loading ? 0.6 : 1 }}>{loading ? 'Gerando...' : 'Gerar Conceitos'}</Btn>
         </div>
+        {loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#3498DB' }}>Gerando 3 conceitos criativos com Llama 3.3...</p>}
+        {error && !loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#c0392b' }}>{error}</p>}
       </Card>
+
+      {result?.parseError && <p style={{ margin: '0 0 8px', fontSize: 12, color: '#d68910' }}>Aviso: resposta parcialmente parseada.</p>}
 
       {result?.concepts?.map((concept, i) => (
         <Card key={i} style={{ marginBottom: 16 }}>
@@ -114,9 +120,7 @@ export default function W4Ads({ w4, setW4 }) {
             </div>
           </div>
           {concept.subheadline && <p style={{ margin: '0 0 8px', fontSize: 13, color: '#555' }}>{concept.subheadline}</p>}
-          {concept.caption && (
-            <div style={{ padding: '8px 12px', borderRadius: 6, background: '#fafaf8', marginBottom: 8, fontSize: 12, color: '#555' }}>{concept.caption}</div>
-          )}
+          {concept.caption && <div style={{ padding: '8px 12px', borderRadius: 6, background: '#fafaf8', marginBottom: 8, fontSize: 12, color: '#555' }}>{concept.caption}</div>}
           {concept.ab_variations && (
             <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
               <span style={{ fontWeight: 700 }}>A/B:</span> {concept.ab_variations.headline_b} / {concept.ab_variations.cta_b}
@@ -141,10 +145,10 @@ export default function W4Ads({ w4, setW4 }) {
         </Card>
       ))}
 
-      {result && !result.concepts && (
+      {result && result.concepts?.length === 0 && result.raw && (
         <Card>
           <SLabel>Raw output</SLabel>
-          <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 400, whiteSpace: 'pre-wrap' }}>{JSON.stringify(result, null, 2)}</pre>
+          <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 400, whiteSpace: 'pre-wrap' }}>{result.raw}</pre>
         </Card>
       )}
     </div>

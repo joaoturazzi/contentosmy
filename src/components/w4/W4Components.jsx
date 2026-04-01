@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { Card, Txa, Sel, Btn, SLabel, Empty, toast } from '../ui';
+import { useState } from 'react';
+import { Card, Txa, Sel, Btn, SLabel, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_MODELS } from '@/lib/constants';
 import { buildSystemPrompt } from '@/lib/w4-system-prompt';
@@ -11,16 +11,17 @@ export default function W4Components({ w4, setW4 }) {
   const [theme, setTheme] = useState('light');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-  const [envKeys, setEnvKeys] = useState({ openrouter: false });
+  const [error, setError] = useState(null);
 
   const settings = w4.settings || [];
-  const openrouterKey = settings.find(s => s.key === 'openrouter_api_key')?.value || '';
-
-  useEffect(() => { fetch('/api/w4/keys').then(r => r.json()).then(setEnvKeys).catch(() => {}); }, []);
+  const getKey = (k) => settings.find(s => s.key === k)?.value || '';
 
   const generate = async () => {
     if (!desc.trim()) { toast('Descreva o componente'); return; }
-    if (!openrouterKey && !envKeys.openrouter) { toast('Configure a OpenRouter API key'); return; }
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
 
     const projectId = uid();
     const project = {
@@ -31,24 +32,26 @@ export default function W4Components({ w4, setW4 }) {
       errorMessage: '', notes: '', createdAt: new Date().toISOString(),
     };
     setW4(d => ({ ...d, projects: [project, ...d.projects] }));
-    setLoading(true);
 
     try {
       const res = await fetch('/api/w4/llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey: openrouterKey || '',
+          apiKey: getKey('openrouter_api_key'),
           model: W4_MODELS.code,
           maxTokens: 8192,
           messages: [
-            { role: 'system', content: buildSystemPrompt('ui_factory', vibe) + `\n\nTASK: Generate a complete, isolated React + Tailwind v3 component. Apply ${W4_VIBES[vibe]?.label || vibe} vibe. Theme: ${theme}. Include all mandatory states (Loading shimmer, Empty with guidance, Error with recovery). Include hover/focus/active micro-interactions. Mobile-first responsive. Output a single complete .tsx file ready to import. Include CSS variables needed in globals.css as a comment at the top.` },
-            { role: 'user', content: `Component request: ${desc}\nVibe: ${vibe}\nTheme: ${theme}` },
+            { role: 'system', content: buildSystemPrompt('ui_factory', vibe) + `\n\nTASK: Generate a COMPLETE, isolated React + Tailwind v3 component. Vibe: ${W4_VIBES[vibe]?.label || vibe}. Theme: ${theme}. Include hover/focus/active micro-interactions. Mobile-first. Output a single .tsx file. COMPLETE code, no truncation. Include CSS variables needed as a comment at the top.` },
+            { role: 'user', content: `Component: ${desc}\nVibe: ${vibe}\nTheme: ${theme}` },
           ],
         }),
       });
       const data = await res.json();
+      if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error.message || 'Generation failed');
+
       const code = data.choices?.[0]?.message?.content || '';
+      if (!code) throw new Error('Nenhum codigo gerado. Tente novamente.');
 
       const output = {
         id: uid(), projectId, type: 'component',
@@ -66,13 +69,14 @@ export default function W4Components({ w4, setW4 }) {
       setResult(code);
       toast('Componente gerado');
     } catch (err) {
-      setW4(d => ({ ...d, projects: d.projects.map(p => p.id === projectId ? { ...p, status: 'error', errorMessage: err.message } : p) }));
-      toast('Erro: ' + err.message);
+      const msg = err.message || 'Erro desconhecido';
+      setError(msg);
+      setW4(d => ({ ...d, projects: d.projects.map(p => p.id === projectId ? { ...p, status: 'error', errorMessage: msg } : p) }));
+      toast('Erro: ' + msg);
     }
     setLoading(false);
   };
 
-  // Recent outputs
   const recentOutputs = (w4.outputs || []).filter(o => o.type === 'component').slice(0, 5);
 
   return (
@@ -93,15 +97,19 @@ export default function W4Components({ w4, setW4 }) {
           </Sel>
           <Btn onClick={generate} style={{ opacity: loading ? 0.6 : 1 }}>{loading ? 'Gerando...' : 'Gerar Componente'}</Btn>
         </div>
+        {loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#3498DB' }}>Gerando componente com Qwen 2.5 Coder...</p>}
+        {error && !loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#c0392b' }}>{error}</p>}
       </Card>
 
       {result && (
         <Card style={{ marginBottom: 20 }}>
-          <SLabel>Codigo gerado</SLabel>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <SLabel style={{ margin: 0 }}>Codigo gerado</SLabel>
+            <Btn sm onClick={() => { navigator.clipboard.writeText(result); toast('Codigo copiado'); }}>Copiar</Btn>
+          </div>
           <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 500, background: '#fafaf8', padding: 12, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {result}
           </pre>
-          <Btn style={{ marginTop: 12 }} onClick={() => { navigator.clipboard.writeText(result); toast('Codigo copiado'); }}>Copiar codigo</Btn>
         </Card>
       )}
 
