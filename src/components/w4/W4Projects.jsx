@@ -68,8 +68,14 @@ export default function W4Projects({ w4, setW4, setPage }) {
                 {projOutputs.map(o => (
                   <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12 }}>
                     <span style={{ padding: '1px 5px', borderRadius: 3, background: '#f4f4f3', fontSize: 10, color: '#888' }}>{o.language}</span>
-                    <span style={{ color: '#555' }}>{o.title}</span>
-                    <button onClick={() => { navigator.clipboard.writeText(o.content); toast('Copiado'); }} style={{ marginLeft: 'auto', fontSize: 11, color: '#555', background: 'none', border: 'none', cursor: 'pointer' }}>Copiar</button>
+                    <span style={{ color: '#555', flex: 1 }}>{o.title}</span>
+                    {(o.type === 'site_code' || o.type === 'component') && (
+                      <>
+                        <button onClick={() => window.open(`/api/w4/preview/${o.id}`, '_blank')} style={{ fontSize: 11, color: '#1a5276', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Preview</button>
+                        <button onClick={() => window.open(`/api/w4/download/${o.id}`, '_blank')} style={{ fontSize: 11, color: '#1e8449', background: 'none', border: 'none', cursor: 'pointer' }}>Download</button>
+                      </>
+                    )}
+                    <button onClick={() => { navigator.clipboard.writeText(o.content); toast('Copiado'); }} style={{ fontSize: 11, color: '#555', background: 'none', border: 'none', cursor: 'pointer' }}>Copiar</button>
                   </div>
                 ))}
               </div>

@@ -13,6 +13,7 @@ export default function W4Rebirth({ w4, setW4 }) {
   const [step, setStep] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [previewId, setPreviewId] = useState(null);
 
   const settings = w4.settings || [];
   const getKey = (k) => settings.find(s => s.key === k)?.value || '';
@@ -25,6 +26,7 @@ export default function W4Rebirth({ w4, setW4 }) {
     setStep('scraping');
     setError(null);
     setResult(null);
+    setPreviewId(null);
 
     const projectId = uid();
     const hostname = safeHostname(fullUrl);
@@ -50,7 +52,7 @@ export default function W4Rebirth({ w4, setW4 }) {
         model: W4_MODELS.analysis,
         maxTokens: 3000,
         messages: [
-          { role: 'system', content: sysPrompt + `\n\nAnalyze this website. Output JSON: {sector, tone_of_voice:[3], color_palette:{primary,secondary,accent}, typography:{display_font,body_font}, sections:[{id,title,rewritten_content}], tagline, weaknesses:[]}. Target vibe: ${vibe}. JSON ONLY.` },
+          { role: 'system', content: sysPrompt + `\n\nAnalyze this website. Output JSON: {sector, tone_of_voice:[3], color_palette:{primary,secondary,accent}, typography:{display_font,body_font}, sections:[{id,title,rewritten_content}], tagline, weaknesses:[]}. Target vibe: ${vibe}. JSON ONLY, no markdown.` },
           { role: 'user', content: `URL: ${fullUrl}\n\n${markdown.slice(0, 4000)}` },
         ],
       });
@@ -59,19 +61,21 @@ export default function W4Rebirth({ w4, setW4 }) {
       const bp = blueprint || { raw: analysisRaw };
       setW4(d => ({ ...d, projects: d.projects.map(p => p.id === projectId ? { ...p, brandBlueprint: bp, status: 'generating' } : p) }));
 
-      // Step 3: Generate frontend
+      // Step 3: Generate frontend (instruct to output FULL HTML, not just React)
       setStep('generating');
       const code = await callLLM({
         apiKey: getKey('openrouter_api_key'),
         model: W4_MODELS.code,
         maxTokens: 6000,
         messages: [
-          { role: 'system', content: sysPrompt + `\n\nGenerate a COMPLETE React+Tailwind single-page site. Apply ${W4_VIBES[vibe]?.label || vibe} vibe. Output one App.tsx with ALL components inline. No external imports except React. COMPLETE code.` },
-          { role: 'user', content: `Blueprint:\n${JSON.stringify(bp, null, 2).slice(0, 3000)}` },
+          { role: 'system', content: sysPrompt + `\n\nGenerate a COMPLETE React single-page site using the brand blueprint. Apply ${W4_VIBES[vibe]?.label || vibe} vibe. Output ONLY the JSX code (no imports, no export default). The code will run in a browser with React and Tailwind CDN. Use only React hooks (useState, useEffect). Use only Tailwind classes. Include ALL components inline as functions. Define a single App function at the end. COMPLETE code, no truncation.` },
+          { role: 'user', content: `Blueprint:\n${JSON.stringify(bp, null, 2).slice(0, 3000)}\n\nGenerate the complete site code.` },
         ],
       });
 
-      const output = { id: uid(), projectId, type: 'site_code', title: `${hostname} — Rebuilt`, content: code, language: 'tsx', metadata: { vibe, url: fullUrl }, createdAt: new Date().toISOString() };
+      // Save output
+      const outputId = uid();
+      const output = { id: outputId, projectId, type: 'site_code', title: `${hostname} — Rebuilt (${W4_VIBES[vibe]?.label || vibe})`, content: code, language: 'tsx', metadata: { vibe, url: fullUrl }, createdAt: new Date().toISOString() };
       setW4(d => ({
         ...d,
         projects: d.projects.map(p => p.id === projectId ? { ...p, outputContent: { code }, status: 'complete' } : p),
@@ -79,6 +83,7 @@ export default function W4Rebirth({ w4, setW4 }) {
       }));
 
       setResult({ blueprint: bp, code });
+      setPreviewId(outputId);
       toast('Site Rebirth completo');
     } catch (err) {
       const msg = err.message || 'Erro desconhecido';
@@ -104,7 +109,7 @@ export default function W4Rebirth({ w4, setW4 }) {
           </Sel>
           <Btn onClick={startRebirth} style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}>{loading ? 'Processando...' : 'Iniciar Rebirth'}</Btn>
         </div>
-        {step && <p style={{ margin: 0, fontSize: 12, color: '#1a5276', fontWeight: 600 }}>{step === 'scraping' ? '1/3 Scraping...' : step === 'analyzing' ? '2/3 Analisando brand...' : '3/3 Gerando codigo...'}</p>}
+        {step && <p style={{ margin: 0, fontSize: 12, color: '#1a5276', fontWeight: 600 }}>{step === 'scraping' ? '1/3 Scraping com Firecrawl...' : step === 'analyzing' ? '2/3 Analisando brand com DeepSeek...' : '3/3 Gerando site com Qwen...'}</p>}
         {error && !loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#c0392b', background: '#fdf2f2', padding: '8px 12px', borderRadius: 6 }}>{error}</p>}
       </Card>
 
@@ -123,6 +128,27 @@ export default function W4Rebirth({ w4, setW4 }) {
         })}
       </div>
 
+      {/* Preview */}
+      {previewId && (
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <SLabel style={{ margin: 0 }}>Preview do site</SLabel>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn sm onClick={() => window.open(`/api/w4/preview/${previewId}`, '_blank')}>Abrir em nova aba</Btn>
+              <Btn sm variant="ghost" onClick={() => window.open(`/api/w4/download/${previewId}`, '_blank')}>Download HTML</Btn>
+            </div>
+          </div>
+          <div style={{ border: '1px solid #eceae5', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+            <iframe
+              src={`/api/w4/preview/${previewId}`}
+              style={{ width: '100%', height: 600, border: 'none' }}
+              title="Site Preview"
+              sandbox="allow-scripts allow-same-origin"
+            />
+          </div>
+        </Card>
+      )}
+
       {result && (
         <>
           <Card style={{ marginBottom: 16 }}>
@@ -130,14 +156,14 @@ export default function W4Rebirth({ w4, setW4 }) {
               <SLabel style={{ margin: 0 }}>Brand Blueprint</SLabel>
               <Btn sm onClick={() => { navigator.clipboard.writeText(JSON.stringify(result.blueprint, null, 2)); toast('Copiado'); }}>Copiar</Btn>
             </div>
-            <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 250, background: '#fafaf8', padding: 12, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(result.blueprint, null, 2)}</pre>
+            <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 200, background: '#fafaf8', padding: 12, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(result.blueprint, null, 2)}</pre>
           </Card>
           <Card>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <SLabel style={{ margin: 0 }}>Codigo gerado</SLabel>
+              <SLabel style={{ margin: 0 }}>Codigo fonte</SLabel>
               <Btn sm onClick={() => { navigator.clipboard.writeText(result.code); toast('Copiado'); }}>Copiar</Btn>
             </div>
-            <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 400, background: '#fafaf8', padding: 12, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{result.code}</pre>
+            <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 300, background: '#fafaf8', padding: 12, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{result.code}</pre>
           </Card>
         </>
       )}

@@ -13,6 +13,7 @@ export default function W4Components({ w4, setW4 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [previewId, setPreviewId] = useState(null);
 
   const settings = w4.settings || [];
   const getKey = (k) => settings.find(s => s.key === k)?.value || '';
@@ -38,7 +39,9 @@ export default function W4Components({ w4, setW4 }) {
         ],
       });
 
-      const output = { id: uid(), projectId, type: 'component', title: `UI: ${desc.slice(0, 40)}`, content: code, language: 'tsx', metadata: { vibe, theme }, createdAt: new Date().toISOString() };
+      const outputId = uid();
+      setPreviewId(outputId);
+      const output = { id: outputId, projectId, type: 'component', title: `UI: ${desc.slice(0, 40)}`, content: code, language: 'tsx', metadata: { vibe, theme }, createdAt: new Date().toISOString() };
       setW4(d => ({
         ...d,
         projects: d.projects.map(p => p.id === projectId ? { ...p, outputContent: { code }, status: 'complete' } : p),
@@ -73,6 +76,21 @@ export default function W4Components({ w4, setW4 }) {
         {loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#1a5276' }}>Gerando com Qwen 2.5 Coder...</p>}
         {error && !loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#c0392b', background: '#fdf2f2', padding: '8px 12px', borderRadius: 6 }}>{error}</p>}
       </Card>
+
+      {previewId && result && (
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <SLabel style={{ margin: 0 }}>Preview</SLabel>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn sm onClick={() => window.open(`/api/w4/preview/${previewId}`, '_blank')}>Abrir</Btn>
+              <Btn sm variant="ghost" onClick={() => window.open(`/api/w4/download/${previewId}`, '_blank')}>Download</Btn>
+            </div>
+          </div>
+          <div style={{ border: '1px solid #eceae5', borderRadius: 8, overflow: 'hidden' }}>
+            <iframe src={`/api/w4/preview/${previewId}`} style={{ width: '100%', height: 500, border: 'none' }} title="Preview" sandbox="allow-scripts allow-same-origin" />
+          </div>
+        </Card>
+      )}
 
       {result && (
         <Card style={{ marginBottom: 20 }}>
