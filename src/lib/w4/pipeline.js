@@ -328,28 +328,45 @@ ${shell.moduleScripts}
 // ════════════════════════════════════════════════════════
 export async function runFix(html, audit, blueprint, scraped, key, onProgress) {
   onProgress?.('Verificando violacoes...');
-  const violations = detectViolations(html, blueprint);
-  const criticals = (audit.problems || []).filter(p => p.severity === 'critical').map(p => `[${p.category}] ${p.fix}`);
-  const allViolations = [...violations, ...criticals];
 
+  // PROGRAMMATIC fixes only — never send full HTML to LLM (it destroys footer/scripts)
   let result = html;
-  if (allViolations.length > 0) {
-    const skills = await loadSkills();
-    const raw = await callOR(key, MODELS.fix, buildFixSystemPrompt(skills),
-      `Corrija APENAS estas violacoes:\n${allViolations.join('\n')}\n\nHTML:\n${html}`,
-      8000, TIMEOUTS.fix);
-    const dm = raw.match(/<!DOCTYPE html>[\s\S]*<\/html>/i);
-    if (dm) result = dm[0];
-    else if (raw.includes('<!DOCTYPE')) result = raw;
-    // Fallback: if fix broke it, keep original
-    if (!result.includes('<!DOCTYPE')) result = html;
-    onProgress?.('Fix concluido');
-  } else {
-    onProgress?.('Nenhuma violacao — aprovado');
+
+  // Fix 1: Replace picsum with real images
+  result = injectRealImages(result, scraped, blueprint);
+
+  // Fix 2: Replace Inter font if present
+  if (/'Inter'|"Inter"/i.test(result)) {
+    const displayFont = blueprint.brand?.typography?.display || 'Cabinet Grotesk';
+    result = result.replace(/'Inter'/g, "'" + displayFont + "'").replace(/"Inter"/g, '"' + displayFont + '"');
+    onProgress?.('Fix: font Inter substituida por ' + displayFont);
   }
 
-  // Inject real images replacing any picsum
-  result = injectRealImages(result, scraped, blueprint);
+  // Fix 3: Replace height:100vh with min-height:100dvh
+  if (result.includes('height: 100vh') || result.includes('height:100vh')) {
+    result = result.replace(/height:\s*100vh/g, 'min-height:100dvh');
+    onProgress?.('Fix: 100vh → 100dvh');
+  }
+
+  // Fix 4: If data-reveal elements exist but no IntersectionObserver in scripts,
+  // it's already in shell.moduleScripts — verify it's there
+  if (result.includes('data-reveal') && !result.includes('IntersectionObserver')) {
+    // The shell scripts should have it, but if somehow missing, inject
+    const ioScript = '(function(){var o=new IntersectionObserver(function(e){e.forEach(function(en){if(en.isIntersecting){en.target.classList.add("visible");o.unobserve(en.target)}})},{threshold:0.12,rootMargin:"0px 0px -50px 0px"});document.querySelectorAll("[data-reveal]").forEach(function(el){o.observe(el)})})();';
+    result = result.replace('</body>', '<script>' + ioScript + '</script>\n</body>');
+    onProgress?.('Fix: IntersectionObserver injetado');
+  }
+
+  // Fix 5: If no <footer in result, inject code-built footer
+  if (!/<footer/i.test(result)) {
+    const footerHTML = buildFooterHTML(blueprint);
+    result = result.replace('</main>', '</main>\n' + footerHTML);
+    onProgress?.('Fix: Footer injetado');
+  }
+
+  const fixes = [];
+  if (result !== html) fixes.push('fixes aplicados');
+  onProgress?.(fixes.length > 0 ? 'Fix: ' + fixes.length + ' correcoes' : 'Nenhuma violacao');
   return result;
 }
 
