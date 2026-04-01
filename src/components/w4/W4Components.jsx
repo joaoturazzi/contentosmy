@@ -4,6 +4,7 @@ import { Card, Txa, Sel, Btn, SLabel, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_MODELS } from '@/lib/constants';
 import { buildSystemPrompt } from '@/lib/w4-system-prompt';
+import { callLLM } from '@/lib/w4-api';
 
 export default function W4Components({ w4, setW4 }) {
   const [desc, setDesc] = useState('');
@@ -18,61 +19,38 @@ export default function W4Components({ w4, setW4 }) {
 
   const generate = async () => {
     if (!desc.trim()) { toast('Descreva o componente'); return; }
-
     setLoading(true);
     setError(null);
     setResult(null);
 
     const projectId = uid();
-    const project = {
-      id: projectId, name: `UI: ${desc.slice(0, 40)}`,
-      type: 'ui_factory', status: 'generating',
-      inputUrl: '', inputText: desc, inputChannel: '', vibe,
-      brandBlueprint: {}, scrapedData: {}, outputContent: {},
-      errorMessage: '', notes: '', createdAt: new Date().toISOString(),
-    };
+    const project = { id: projectId, name: `UI: ${desc.slice(0, 40)}`, type: 'ui_factory', status: 'generating', inputUrl: '', inputText: desc, inputChannel: '', vibe, brandBlueprint: {}, scrapedData: {}, outputContent: {}, errorMessage: '', notes: '', createdAt: new Date().toISOString() };
     setW4(d => ({ ...d, projects: [project, ...d.projects] }));
 
     try {
-      const res = await fetch('/api/w4/llm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: getKey('openrouter_api_key'),
-          model: W4_MODELS.code,
-          maxTokens: 8192,
-          messages: [
-            { role: 'system', content: buildSystemPrompt('ui_factory', vibe) + `\n\nTASK: Generate a COMPLETE, isolated React + Tailwind v3 component. Vibe: ${W4_VIBES[vibe]?.label || vibe}. Theme: ${theme}. Include hover/focus/active micro-interactions. Mobile-first. Output a single .tsx file. COMPLETE code, no truncation. Include CSS variables needed as a comment at the top.` },
-            { role: 'user', content: `Component: ${desc}\nVibe: ${vibe}\nTheme: ${theme}` },
-          ],
-        }),
+      const code = await callLLM({
+        apiKey: getKey('openrouter_api_key'),
+        model: W4_MODELS.code,
+        maxTokens: 6000,
+        messages: [
+          { role: 'system', content: buildSystemPrompt('ui_factory', vibe) + `\n\nGenerate a COMPLETE React+Tailwind v3 component. Vibe: ${W4_VIBES[vibe]?.label || vibe}. Theme: ${theme}. Include hover/focus/active states. Mobile-first. One .tsx file. COMPLETE code, no truncation.` },
+          { role: 'user', content: `Component: ${desc}` },
+        ],
       });
-      const data = await res.json();
-      if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error.message || 'Generation failed');
 
-      const code = data.choices?.[0]?.message?.content || '';
-      if (!code) throw new Error('Nenhum codigo gerado. Tente novamente.');
-
-      const output = {
-        id: uid(), projectId, type: 'component',
-        title: `UI: ${desc.slice(0, 40)}`, content: code,
-        language: 'tsx', metadata: { vibe, theme },
-        createdAt: new Date().toISOString(),
-      };
-
+      const output = { id: uid(), projectId, type: 'component', title: `UI: ${desc.slice(0, 40)}`, content: code, language: 'tsx', metadata: { vibe, theme }, createdAt: new Date().toISOString() };
       setW4(d => ({
         ...d,
         projects: d.projects.map(p => p.id === projectId ? { ...p, outputContent: { code }, status: 'complete' } : p),
         outputs: [output, ...d.outputs],
       }));
-
       setResult(code);
       toast('Componente gerado');
     } catch (err) {
       const msg = err.message || 'Erro desconhecido';
       setError(msg);
       setW4(d => ({ ...d, projects: d.projects.map(p => p.id === projectId ? { ...p, status: 'error', errorMessage: msg } : p) }));
-      toast('Erro: ' + msg);
+      toast('Erro: ' + msg.slice(0, 80));
     }
     setLoading(false);
   };
@@ -85,42 +63,34 @@ export default function W4Components({ w4, setW4 }) {
       <p style={{ margin: '0 0 20px', fontSize: 13, color: '#888' }}>Peca qualquer componente React + Tailwind com qualidade Awwwards.</p>
 
       <Card style={{ marginBottom: 20 }}>
-        <SLabel>Descricao do componente</SLabel>
-        <Txa placeholder="Ex: Pricing table com 3 tiers, toggle mensal/anual, destaque no tier do meio, dark mode..." value={desc} onChange={e => setDesc(e.target.value)} rows={3} style={{ marginBottom: 8 }} />
+        <SLabel>Descricao</SLabel>
+        <Txa placeholder="Ex: Pricing table com 3 tiers, toggle mensal/anual, dark mode..." value={desc} onChange={e => setDesc(e.target.value)} rows={3} style={{ marginBottom: 8 }} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <Sel value={vibe} onChange={e => setVibe(e.target.value)} style={{ width: 180 }}>
-            {Object.entries(W4_VIBES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </Sel>
-          <Sel value={theme} onChange={e => setTheme(e.target.value)} style={{ width: 120 }}>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </Sel>
-          <Btn onClick={generate} style={{ opacity: loading ? 0.6 : 1 }}>{loading ? 'Gerando...' : 'Gerar Componente'}</Btn>
+          <Sel value={vibe} onChange={e => setVibe(e.target.value)} style={{ width: 180 }}>{Object.entries(W4_VIBES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Sel>
+          <Sel value={theme} onChange={e => setTheme(e.target.value)} style={{ width: 120 }}><option value="light">Light</option><option value="dark">Dark</option></Sel>
+          <Btn onClick={generate} style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}>{loading ? 'Gerando...' : 'Gerar Componente'}</Btn>
         </div>
-        {loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#3498DB' }}>Gerando componente com Qwen 2.5 Coder...</p>}
-        {error && !loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#c0392b' }}>{error}</p>}
+        {loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#1a5276' }}>Gerando com Qwen 2.5 Coder...</p>}
+        {error && !loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#c0392b', background: '#fdf2f2', padding: '8px 12px', borderRadius: 6 }}>{error}</p>}
       </Card>
 
       {result && (
         <Card style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <SLabel style={{ margin: 0 }}>Codigo gerado</SLabel>
-            <Btn sm onClick={() => { navigator.clipboard.writeText(result); toast('Codigo copiado'); }}>Copiar</Btn>
+            <SLabel style={{ margin: 0 }}>Codigo</SLabel>
+            <Btn sm onClick={() => { navigator.clipboard.writeText(result); toast('Copiado'); }}>Copiar</Btn>
           </div>
-          <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 500, background: '#fafaf8', padding: 12, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {result}
-          </pre>
+          <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 500, background: '#fafaf8', padding: 12, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{result}</pre>
         </Card>
       )}
 
       {recentOutputs.length > 0 && (
-        <>
-          <SLabel>Componentes recentes</SLabel>
+        <><SLabel>Recentes</SLabel>
           {recentOutputs.map(o => (
             <Card key={o.id} style={{ marginBottom: 8, cursor: 'pointer' }} onClick={() => setResult(o.content)}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{o.title}</p>
-                <span style={{ fontSize: 11, color: '#888' }}>{o.metadata?.vibe || ''} / {o.metadata?.theme || ''}</span>
+                <span style={{ fontSize: 11, color: '#888' }}>{o.metadata?.vibe} / {o.metadata?.theme}</span>
               </div>
             </Card>
           ))}

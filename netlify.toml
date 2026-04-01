@@ -2,5 +2,13 @@
   command = "npm run build"
   publish = ".next"
 
+[functions]
+  # Maximum timeout for serverless functions (26s max on Pro plan)
+  node_bundler = "esbuild"
+
+# Extend timeout for W4 API routes that call external LLM APIs
+[functions."api/w4/*"]
+  # External API calls (OpenRouter, Firecrawl) need more time
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
