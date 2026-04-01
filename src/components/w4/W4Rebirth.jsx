@@ -4,9 +4,10 @@ import { Card, Inp, Sel, Btn, SLabel, Modal, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_MODELS } from '@/lib/constants';
 import { buildSystemPrompt } from '@/lib/w4-system-prompt';
-import { callLLM, callScrape, ensureUrl, safeHostname, generateBrandCore, generateVideoConcepts, validateBlueprint, auditGeneratedHTML, testConnections } from '@/lib/w4-api';
+import { callLLM, callScrape, ensureUrl, safeHostname, generateBrandCore, generateVideoConcepts, validateBlueprint, testConnections } from '@/lib/w4-api';
 import { buildPreviewHTML, downloadHTML, isCodeComplete } from '@/lib/w4-preview';
 import { parseScrapedData, fetchJina, fetchRawHTML } from '@/lib/w4-scrape-parser';
+import { runFullPipeline } from '@/lib/w4/pipeline';
 
 const VIBE_CFG = {
   ethereal_glass: { bg:'#050505', surface:'#0d0d0d', text:'#FFFFFF', orbOp:'0.12', cardBg:'rgba(255,255,255,0.04)', cardBorder:'rgba(255,255,255,0.08)', desc:'OLED black, mesh gradients, glassmorphism' },
@@ -33,6 +34,7 @@ export default function W4Rebirth({ w4, setW4 }) {
   const [selectedConcept, setSelectedConcept] = useState(null);
   const [generatedHtml, setGeneratedHtml] = useState(null);
   const [htmlAudit, setHtmlAudit] = useState(null);
+  const [pipelineStep, setPipelineStep] = useState(null); // {stepId, detail, pct}
   const [showRaw, setShowRaw] = useState(false);
   const [showBpRaw, setShowBpRaw] = useState(false);
   const intRef = useRef(null);
@@ -121,108 +123,38 @@ export default function W4Rebirth({ w4, setW4 }) {
   };
 
   // ═══ PHASE 3: HTML ═══
+  // ═══ PHASE 3: HTML via 4-STEP PIPELINE ═══
   const startHtmlGen = async () => {
     if (!blueprint || !selectedConcept) return;
     if (!orKey) { toast('Configure OpenRouter key'); return; }
-    setLoading(true); setError(null); setActiveTab('html'); setHtmlAudit(null);
-    animate(['Enviando blueprint...', 'Gerando navbar e hero...', 'Construindo features...', 'Aplicando modulos cinematicos...', 'Finalizando footer e scripts...', 'Renderizando...']);
+    setLoading(true); setError(null); setActiveTab('html'); setHtmlAudit(null); setPipelineStep(null);
+
     try {
-      const b = blueprint; const c = selectedConcept;
-      const vc = VIBE_CFG[vibe] || VIBE_CFG.ethereal_glass;
-      const pri = b.brand?.colors?.primary || '#050505';
-      const sec = b.brand?.colors?.secondary || '#1A1A1A';
-      const acc = b.brand?.colors?.accent || '#3B82F6';
-      const dFont = b.brand?.typography?.display || 'Outfit';
-      const bFont = b.brand?.typography?.body || 'Outfit';
-      const feats = b.copy?.sections?.find(s => s.id === 'features')?.items || [];
-      const about = b.copy?.sections?.find(s => s.id === 'about') || {};
-      const contact = b.copy?.sections?.find(s => s.id === 'contact') || {};
+      const result = await runFullPipeline(
+        scraped, blueprint, vibe, orKey,
+        (progress) => setPipelineStep(progress)
+      );
 
-      // Bug 3 fix: provide real images list + ban picsum
-      const imgSection = scraped?.images?.length > 0
-        ? `IMAGENS REAIS DO SITE (usar estas URLs nas <img> tags):\n${scraped.images.slice(0, 8).map((img, i) => `  ${i + 1}. ${img}`).join('\n')}\nLogo: ${scraped?.logoUrl || 'usar nome em bold'}\nREGRA: Use APENAS essas URLs reais. NUNCA use picsum.photos, lorempixel, placeholder.com.`
-        : `Nenhuma imagem encontrada. NAO use <img> com URLs externas. Use SVGs inline para icones e gradientes CSS para backgrounds. PROIBIDO: picsum.photos, lorempixel, placeholder.com.`;
+      const html = buildPreviewHTML(result.html, `${safeHostname(url)} — Rebuilt`);
+      setHtmlAudit(result.auditResult.checks);
 
-      const code = await callLLM({ apiKey: orKey, model: W4_MODELS.code, maxTokens: 12000, messages: [
-        { role: 'system', content: buildSystemPrompt('site_rebirth', vibe) + `
-
-Gere site HTML COMPLETO. <!DOCTYPE html> ate </html>. Sem backticks. Sem markdown.
-
-MODULOS OBRIGATORIOS (copiar no HTML):
-1. body::after grain: content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:0.025;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:256px
-2. 2 mesh orbs: div position:fixed border-radius:50% filter:blur(120px) pointer-events:none — Orb1: ${pri} opacity ${vc.orbOp} anim 14s — Orb2: ${sec} opacity 0.10 anim 18s
-3. [data-reveal] scroll reveal: opacity:0;transform:translateY(28px);transition:0.9s cubic-bezier(0.16,1,0.3,1);transition-delay:calc(var(--stagger,0)*120ms) + IntersectionObserver script
-4. Double-Bezel card: outer bg-white/5 ring-1 ring-white/5 p-1.5 rounded-[2rem] → inner shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] rounded-[calc(2rem-6px)]
-5. Button-in-Button: texto + <span> circular com seta ↗
-6. Floating island navbar: pill, fixed top-6, mx-auto, rounded-full, backdrop-blur, bg-black/80
-7. scroll-behavior:smooth + smooth scroll links
-
-BENTO ASSIMETRICO CSS (copiar exato — NUNCA 3 colunas iguais):
-.bento{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
-.bento-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:1.75rem;padding:2rem;transition:border-color 0.3s,transform 0.35s}
-.bento-card:hover{border-color:rgba(255,255,255,0.12);transform:translateY(-2px)}
-.bento-card.wide{grid-column:1/-1}
-Estrutura: [card][card tall] / [card wide] / [card][card]
-
-SECOES OBRIGATORIAS (minimo 8 — site curto = inaceitavel):
-1. Navbar floating pill (logo + links + CTA)
-2. Hero min-h-[100dvh] assimetrico (headline + sub + CTA + mesh bg)
-3. Stats/numeros (se dados reais existem)
-4. Features bento assimetrico (5 cards)
-5. Sobre a empresa (conteudo real)
-6. Como funciona / processo / produtos
-7. CTA section (radial gradient)
-8. Footer completo (dados reais)
-
-<head>: <script src="https://cdn.tailwindcss.com"></script> <script defer src="https://unpkg.com/alpinejs@3/dist/cdn.min.js"></script> Google Fonts ${dFont.replace(/ /g, '+')}+${bFont.replace(/ /g, '+')}. tailwind.config com cores e fonts.` },
-        { role: 'user', content: `EMPRESA: ${b.business?.name} — ${b.business?.sector}
-VIBE: ${vibe} — BG:${vc.bg} Text:${vc.text}
-CORES: primary=${pri} secondary=${sec} accent=${acc}
-FONT: display=${dFont} body=${bFont}
-LOGO: ${b.brand?.logo_url && b.brand.logo_url !== 'null' ? '<img src="' + b.brand.logo_url + '" class="h-6">' : '"' + b.business?.name + '" em font bold'}
-
-COPY:
-Headline: "${b.copy?.hero_headline}"
-Sub: "${b.copy?.hero_sub}"
-CTA: "${b.copy?.hero_cta}"
-
-FEATURES (bento assimetrico):
-${feats.map((f, i) => (i + 1) + '. ' + f.title + ': ' + f.desc).join('\n')}
-
-SOBRE: ${about.content || 'conteudo sobre a empresa'}
-CONTATO: ${contact.phone || ''} ${contact.email || ''} ${contact.address || ''}
-
-${imgSection}
-
-CONCEITO VIDEO: ${c.id} — ${c.name}. Cena: ${c.scene}. Mood: ${c.mood}
-Hero bg: mesh gradient (video sera adicionado depois)
-<!-- SUBSTITUIR: <video autoplay muted loop playsinline src="hero.mp4"> -->
-
-Gere o HTML COMPLETO agora. Minimo 8 secoes. <!DOCTYPE html> ate </html>.` }
-      ] });
-      stopAnim();
-
-      const html = buildPreviewHTML(code, `${safeHostname(url)} — Rebuilt`);
-      const audit = auditGeneratedHTML(html, b.business?.name);
-      setHtmlAudit(audit);
-
-      if (!isCodeComplete(code)) {
-        setError('HTML possivelmente incompleto. Considere regenerar.');
+      if (!result.auditResult.allPassed) {
+        setError(`Audit: ${result.auditResult.score} — alguns checks falharam`);
       }
 
       const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
       if (previewUrl) URL.revokeObjectURL(previewUrl);
 
       const projectId = uid();
-      const output = { id: uid(), projectId, type: 'site_code', title: `${safeHostname(url)} — Rebuilt`, content: code, language: 'html', metadata: { vibe, url: ensureUrl(url) }, createdAt: new Date().toISOString() };
-      const project = { id: projectId, name: `Rebirth: ${safeHostname(url)}`, type: 'site_rebirth', status: 'complete', inputUrl: ensureUrl(url), inputText: '', inputChannel: '', vibe, brandBlueprint: blueprint, scrapedData: {}, outputContent: { code }, errorMessage: '', notes: '', createdAt: new Date().toISOString() };
+      const output = { id: uid(), projectId, type: 'site_code', title: `${safeHostname(url)} — Rebuilt`, content: result.html, language: 'html', metadata: { vibe, url: ensureUrl(url), auditScore: result.auditResult.score }, createdAt: new Date().toISOString() };
+      const project = { id: projectId, name: `Rebirth: ${safeHostname(url)}`, type: 'site_rebirth', status: 'complete', inputUrl: ensureUrl(url), inputText: '', inputChannel: '', vibe, brandBlueprint: blueprint, scrapedData: {}, outputContent: { code: result.html, audit: result.audit, plan: result.plan }, errorMessage: '', notes: '', createdAt: new Date().toISOString() };
       setW4(d => ({ ...d, projects: [project, ...d.projects], outputs: [output, ...d.outputs] }));
 
-      setGeneratedHtml({ code, html });
+      setGeneratedHtml({ code: result.html, html });
       setPreviewUrl(blobUrl);
-      const passed = audit.filter(c => c.pass).length;
-      toast(`Site gerado — audit: ${passed}/${audit.length}`);
-    } catch (e) { stopAnim(); setError(e.message); toast('Erro: ' + (e.message || '').slice(0, 80)); }
+      toast(`Site gerado — ${result.auditResult.score}`);
+    } catch (e) { setError(e.message); toast('Erro: ' + (e.message || '').slice(0, 80)); }
+    setPipelineStep(null);
     setLoading(false);
   };
 
@@ -349,8 +281,34 @@ Gere o HTML COMPLETO agora. Minimo 8 secoes. <!DOCTYPE html> ate </html>.` }
       {/* ═══ TAB: HTML ═══ */}
       {activeTab === 'html' && (
         <div>
-          {!generatedHtml && !loading && blueprint && selectedConcept && <div style={{ textAlign: 'center', padding: 32 }}><p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Conceito {selectedConcept.id}: "{selectedConcept.name}"</p><Btn onClick={startHtmlGen}>Gerar Site HTML</Btn></div>}
+          {!generatedHtml && !loading && blueprint && selectedConcept && <div style={{ textAlign: 'center', padding: 32 }}><p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Conceito {selectedConcept.id}: "{selectedConcept.name}"</p><Btn onClick={startHtmlGen}>Gerar Site HTML (4-step pipeline)</Btn></div>}
           {!generatedHtml && !loading && (!blueprint || !selectedConcept) && <div style={{ textAlign: 'center', padding: 32 }}><p style={{ fontSize: 13, color: '#ccc' }}>Complete as fases anteriores</p></div>}
+
+          {/* Pipeline progress */}
+          {loading && pipelineStep && (
+            <Card style={{ marginBottom: 14 }}>
+              <SLabel>Pipeline ({pipelineStep.pct || 0}%)</SLabel>
+              {[
+                { id: 'audit', label: 'Audit (redesign-skill)' },
+                { id: 'plan', label: 'Plan (estrutura das secoes)' },
+                { id: 'build', label: 'Build (HTML + modulos cinematicos)' },
+                { id: 'fix', label: 'Fix (corrigir violacoes)' },
+              ].map(step => {
+                const pipeSteps = ['audit', 'plan', 'build', 'fix'];
+                const curIdx = pipeSteps.indexOf(pipelineStep.stepId);
+                const stepIdx = pipeSteps.indexOf(step.id);
+                const isDone = stepIdx < curIdx;
+                const isActive = stepIdx === curIdx;
+                return (
+                  <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: isDone ? '#1e8449' : isActive ? '#3498DB' : '#ccc', flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: isDone ? '#1e8449' : isActive ? '#1a5276' : '#888', fontWeight: isActive ? 600 : 400 }}>{step.label}</span>
+                    {isActive && pipelineStep.detail && <span style={{ fontSize: 11, color: '#888', marginLeft: 4 }}>— {pipelineStep.detail}</span>}
+                  </div>
+                );
+              })}
+            </Card>
+          )}
           {generatedHtml && previewUrl && (
             <>
               {/* Audit checklist */}
