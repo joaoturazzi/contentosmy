@@ -35,6 +35,7 @@ export default function W4Rebirth({ w4, setW4 }) {
   const [generatedHtml, setGeneratedHtml] = useState(null);
   const [htmlAudit, setHtmlAudit] = useState(null);
   const [pipelineStep, setPipelineStep] = useState(null); // {stepId, detail, pct}
+  const [outputId, setOutputId] = useState(null);
   const [showRaw, setShowRaw] = useState(false);
   const [showBpRaw, setShowBpRaw] = useState(false);
   const intRef = useRef(null);
@@ -62,7 +63,7 @@ export default function W4Rebirth({ w4, setW4 }) {
   // ═══ RESET ═══
   const resetAll = () => {
     setScraped(null); setBlueprint(null); setSelectedConcept(null);
-    setGeneratedHtml(null); setHtmlAudit(null); setError(null);
+    setGeneratedHtml(null); setHtmlAudit(null); setError(null); setOutputId(null);
     setScrapeSteps([]); setStepMsg(''); setActiveTab('scrape');
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
   };
@@ -131,7 +132,9 @@ export default function W4Rebirth({ w4, setW4 }) {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
 
       const projectId = uid();
-      const output = { id: uid(), projectId, type: 'site_code', title: `${safeHostname(url)} — Rebuilt`, content: result.html, language: 'html', metadata: { vibe, url: ensureUrl(url), auditScore: result.auditResult.score }, createdAt: new Date().toISOString() };
+      const outId = uid();
+      setOutputId(outId);
+      const output = { id: outId, projectId, type: 'site_code', title: `${safeHostname(url)} — Rebuilt`, content: result.html, language: 'html', metadata: { vibe, url: ensureUrl(url), auditScore: result.auditResult.score }, createdAt: new Date().toISOString() };
       const project = { id: projectId, name: `Rebirth: ${safeHostname(url)}`, type: 'site_rebirth', status: 'complete', inputUrl: ensureUrl(url), inputText: '', inputChannel: '', vibe, brandBlueprint: blueprint, scrapedData: {}, outputContent: { code: result.html, audit: result.audit, plan: result.plan }, errorMessage: '', notes: '', createdAt: new Date().toISOString() };
       setW4(d => ({ ...d, projects: [project, ...d.projects], outputs: [output, ...d.outputs] }));
 
@@ -331,12 +334,26 @@ export default function W4Rebirth({ w4, setW4 }) {
         </div>
       )}
 
-      <Modal open={deployModal} onClose={() => setDeployModal(false)} title="Publicar online" width={480}>
+      <Modal open={deployModal} onClose={() => setDeployModal(false)} title="Site publicado" width={480}>
         <div style={{ fontSize: 13, color: '#555', lineHeight: 1.7 }}>
-          <p style={{ fontWeight: 700, marginBottom: 8 }}>Surge.sh (CLI)</p>
-          <pre style={{ background: '#fafaf8', padding: 10, borderRadius: 6, fontSize: 11, marginBottom: 16, whiteSpace: 'pre-wrap' }}>{`mkdir rebirth-${slug}\nmv rebirth-${slug}.html rebirth-${slug}/index.html\nnpm install -g surge\ncd rebirth-${slug} && surge .`}</pre>
-          <p style={{ fontWeight: 700, marginBottom: 8 }}>Netlify Drop (sem CLI)</p>
-          <p>Acesse <strong>app.netlify.com/drop</strong> e arraste a pasta.</p>
+          {outputId ? (
+            <>
+              <p style={{ fontWeight: 700, marginBottom: 8, color: '#1e8449' }}>Seu site esta online!</p>
+              <p style={{ marginBottom: 8 }}>URL publica (funciona sem login):</p>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+                <input readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/w4/preview/${outputId}`} style={{ flex: 1, fontSize: 12, padding: '8px 12px', borderRadius: 6, border: '1px solid #e5e4e0', fontFamily: 'monospace', background: '#fafaf8' }} onClick={e => e.target.select()} />
+                <Btn sm onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/api/w4/preview/${outputId}`); toast('URL copiada'); }}>Copiar</Btn>
+              </div>
+              <Btn sm onClick={() => window.open(`/api/w4/preview/${outputId}`, '_blank')}>Abrir em nova aba</Btn>
+              <p style={{ marginTop: 16, fontSize: 11, color: '#888' }}>Esta URL e acessivel por qualquer pessoa, sem necessidade de login.</p>
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eceae5' }}>
+                <p style={{ fontWeight: 700, marginBottom: 6, fontSize: 12 }}>Alternativa: Download + Netlify Drop</p>
+                <p style={{ fontSize: 12, color: '#888' }}>Baixe o HTML e arraste em <strong>app.netlify.com/drop</strong> para dominio customizado.</p>
+              </div>
+            </>
+          ) : (
+            <p style={{ color: '#888' }}>Gere o site primeiro antes de publicar.</p>
+          )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}><Btn variant="ghost" onClick={() => setDeployModal(false)}>Fechar</Btn></div>
       </Modal>
