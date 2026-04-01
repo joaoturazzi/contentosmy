@@ -4,9 +4,9 @@ import { Card, Inp, Sel, Btn, SLabel, Modal, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_MODELS } from '@/lib/constants';
 import { buildSystemPrompt } from '@/lib/w4-system-prompt';
-import { callLLM, callScrape, ensureUrl, safeHostname, parseJSON, validateBlueprint, auditGeneratedHTML, testConnections } from '@/lib/w4-api';
+import { callLLM, callScrape, ensureUrl, safeHostname, generateBrandCore, generateVideoConcepts, validateBlueprint, auditGeneratedHTML, testConnections } from '@/lib/w4-api';
 import { buildPreviewHTML, downloadHTML, isCodeComplete } from '@/lib/w4-preview';
-import { parseScrapedData } from '@/lib/w4-scrape-parser';
+import { parseScrapedData, fetchJina, fetchRawHTML } from '@/lib/w4-scrape-parser';
 
 const VIBE_CFG = {
   ethereal_glass: { bg:'#050505', surface:'#0d0d0d', text:'#FFFFFF', orbOp:'0.12', cardBg:'rgba(255,255,255,0.04)', cardBorder:'rgba(255,255,255,0.08)', desc:'OLED black, mesh gradients, glassmorphism' },
@@ -80,9 +80,18 @@ export default function W4Rebirth({ w4, setW4 }) {
     ]);
     try {
       upStep('scrape', 'loading'); upStep('map', 'loading');
-      const { markdown, data } = await callScrape({ url: fullUrl, apiKey: fcKey });
+      // Multi-source: Firecrawl + Jina + raw HTML in parallel
+      const [fcResult, jinaResult, rawResult] = await Promise.allSettled([
+        callScrape({ url: fullUrl, apiKey: fcKey }),
+        fetchJina(fullUrl),
+        fetchRawHTML(fullUrl),
+      ]);
+      const fcData = fcResult.status === 'fulfilled' ? fcResult.value : null;
+      const jina = jinaResult.status === 'fulfilled' ? jinaResult.value : '';
+      const rawHTML = rawResult.status === 'fulfilled' ? rawResult.value : '';
+      if (!fcData) throw new Error('Firecrawl falhou: ' + (fcResult.reason?.message || 'erro'));
       upStep('scrape', true); upStep('map', true); upStep('parse', 'loading');
-      const parsed = parseScrapedData(data.scrape, data.map, fullUrl);
+      const parsed = parseScrapedData(fcData.scrape, fcData.map, fullUrl, jina, rawHTML);
       if (!parsed.markdown || parsed.markdown.length < 50) throw new Error('Conteudo insuficiente extraido.');
       upStep('parse', true); upStep('done', true);
       setScraped(parsed);
@@ -91,20 +100,20 @@ export default function W4Rebirth({ w4, setW4 }) {
     setLoading(false);
   };
 
-  // ═══ PHASE 2: BRAND ═══
+  // ═══ PHASE 2: BRAND (split into 2 parallel calls) ═══
   const startBrand = async () => {
     if (!scraped) return; if (!orKey) { toast('Configure OpenRouter key na Config'); return; }
     setLoading(true); setError(null); setBlueprint(null); setSelectedConcept(null); setActiveTab('brand');
     animate(['Analisando identidade da marca...', 'Extraindo paleta e tipografia...', 'Reescrevendo copy...', 'Gerando 3 conceitos de video...', 'Finalizando...']);
     try {
-      const raw = await callLLM({ apiKey: orKey, model: W4_MODELS.analysis, maxTokens: 3500, messages: [
-        { role: 'system', content: 'Voce e um diretor de criacao senior. Responda APENAS com JSON valido. Sem markdown, sem backticks, sem explicacoes.' },
-        { role: 'user', content: `Analise e gere brand_blueprint JSON.\nURL: ${scraped.metadata.url}\nTitulo: ${scraped.metadata.title}\nDesc: ${scraped.metadata.description}\nH1s: ${scraped.headings.h1.join(' | ')}\nH2s: ${scraped.headings.h2.slice(0,6).join(' | ')}\nCores: ${scraped.colors.slice(0,8).join(', ')}\nFonts: ${scraped.fonts.join(', ')}\nTel: ${scraped.contact.phones.join(', ')}\nEmail: ${scraped.contact.emails.join(', ')}\nLogo: ${scraped.logoUrl || 'nao encontrada'}\nVIBE: ${vibe}\n\n${scraped.markdown.slice(0,6000)}\n\nJSON: {business:{name,sector,location,main_product,tone_of_voice,target_audience}, brand:{colors:{primary:"#hex",secondary:"#hex",accent:"#hex",bg:"#050505",surface:"#111111"}, typography:{display:"font premium nunca Inter/Roboto",body:"Outfit"}, vibe_archetype:"${vibe}", logo_url:"${scraped.logoUrl||'null'}"}, copy:{hero_headline:"max 8 palavras",hero_sub:"15-20 palavras",hero_cta:"3-4 palavras", sections:[{id:"features",items:[{title,desc}x4]},{id:"about",title,content},{id:"contact",address,phone,email,hours}]}, problems_fixed:["3 problemas"], video_concepts:[{id:"A",name,scene,camera,lighting,mood,image_prompt:"en prompt for FLUX",video_prompt:"en prompt for Kling"},{id:"B",...},{id:"C",...}]}` }
-      ] });
+      // Split: brand core + video concepts in parallel
+      const [core, concepts] = await Promise.all([
+        generateBrandCore(scraped, vibe, orKey, W4_MODELS.analysis),
+        generateVideoConcepts(scraped.businessName || scraped.metadata.title, '', '', scraped.colors[0] || '#333', orKey, W4_MODELS.analysis),
+      ]);
       stopAnim();
-      const { parsed: bp } = parseJSON(raw);
-      if (!bp) throw new Error('JSON invalido. Resposta: ' + raw.slice(0, 300));
-      validateBlueprint(bp);
+      validateBlueprint(core);
+      const bp = { ...core, video_concepts: concepts.length === 3 ? concepts : [{ id: 'A', name: 'Conceito A', scene: 'Cena padrao', camera: 'Zoom lento', lighting: 'Dramatica', mood: 'Premium', image_prompt: 'product cinematic 8K', video_prompt: 'slow zoom' }, { id: 'B', name: 'Conceito B', scene: 'Cena alternativa', camera: 'Pan', lighting: 'Natural', mood: 'Clean', image_prompt: 'product natural light', video_prompt: 'slow pan' }, { id: 'C', name: 'Conceito C', scene: 'Cena close-up', camera: 'Close-up', lighting: 'Studio', mood: 'Detalhado', image_prompt: 'product close-up studio', video_prompt: 'slow tilt' }] };
       setBlueprint(bp);
       toast('Brand blueprint gerado');
     } catch (e) { stopAnim(); setError(e.message); toast('Erro: ' + (e.message || '').slice(0, 80)); }
@@ -129,9 +138,67 @@ export default function W4Rebirth({ w4, setW4 }) {
       const about = b.copy?.sections?.find(s => s.id === 'about') || {};
       const contact = b.copy?.sections?.find(s => s.id === 'contact') || {};
 
-      const code = await callLLM({ apiKey: orKey, model: W4_MODELS.code, maxTokens: 10000, messages: [
-        { role: 'system', content: buildSystemPrompt('site_rebirth', vibe) + `\n\nGere site HTML COMPLETO. <!DOCTYPE html> ate </html>. Sem backticks. Sem markdown.\n\nMODULOS OBRIGATORIOS:\n1. body::after grain overlay (fixed,pointer-events-none,feTurbulence noise,opacity 0.025)\n2. 2 mesh gradient orbs (fixed,blur(120px),cores da marca,animados)\n3. [data-reveal] scroll reveal com IntersectionObserver (translateY(28px) opacity-0 → visible)\n4. Double-Bezel no card principal (outer ring-1 ring-white/5 p-1.5 rounded-[2rem])\n5. Button-in-Button no CTA (texto + span circular com seta)\n6. Floating island navbar (pill,fixed,top-6,rounded-full,backdrop-blur)\n7. scroll-behavior:smooth\n\n<head>: <script src="https://cdn.tailwindcss.com"></script> <script defer src="https://unpkg.com/alpinejs@3/dist/cdn.min.js"></script> Google Fonts ${dFont}+${bFont}. tailwind.config com colors primary/secondary/accent/surface e fontFamily.` },
-        { role: 'user', content: `EMPRESA: ${b.business?.name} — ${b.business?.sector}\nVIBE: ${vibe} — BG:${vc.bg} Text:${vc.text}\nCORES: primary=${pri} secondary=${sec} accent=${acc}\nFONT: ${dFont}/${bFont}\nLOGO: ${b.brand?.logo_url && b.brand.logo_url !== 'null' ? '<img src="'+b.brand.logo_url+'" class="h-6">' : '"'+b.business?.name+'"'}\n\nHEADLINE: "${b.copy?.hero_headline}"\nSUB: "${b.copy?.hero_sub}"\nCTA: "${b.copy?.hero_cta}"\n\nFEATURES:\n${feats.map((f,i) => (i+1)+'. '+f.title+': '+f.desc).join('\n')}\n\nSOBRE: ${about.content || ''}\nCONTATO: ${contact.phone||''} ${contact.email||''} ${contact.address||''}\n\nCONCEITO VIDEO: ${c.id} — ${c.name}. Cena: ${c.scene}. Mood: ${c.mood}\nHero background: mesh gradient animado (video nao disponivel)\n<!-- SUBSTITUIR: <video autoplay muted loop playsinline src="hero.mp4"> -->\n\nSECOES: Navbar pill → Hero min-h-[100dvh] assimetrico → Features bento (col-span-2 no primeiro) → Sobre → CTA → Footer com dados reais\n\nGere HTML COMPLETO agora.` }
+      // Bug 3 fix: provide real images list + ban picsum
+      const imgSection = scraped?.images?.length > 0
+        ? `IMAGENS REAIS DO SITE (usar estas URLs nas <img> tags):\n${scraped.images.slice(0, 8).map((img, i) => `  ${i + 1}. ${img}`).join('\n')}\nLogo: ${scraped?.logoUrl || 'usar nome em bold'}\nREGRA: Use APENAS essas URLs reais. NUNCA use picsum.photos, lorempixel, placeholder.com.`
+        : `Nenhuma imagem encontrada. NAO use <img> com URLs externas. Use SVGs inline para icones e gradientes CSS para backgrounds. PROIBIDO: picsum.photos, lorempixel, placeholder.com.`;
+
+      const code = await callLLM({ apiKey: orKey, model: W4_MODELS.code, maxTokens: 12000, messages: [
+        { role: 'system', content: buildSystemPrompt('site_rebirth', vibe) + `
+
+Gere site HTML COMPLETO. <!DOCTYPE html> ate </html>. Sem backticks. Sem markdown.
+
+MODULOS OBRIGATORIOS (copiar no HTML):
+1. body::after grain: content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:0.025;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:256px
+2. 2 mesh orbs: div position:fixed border-radius:50% filter:blur(120px) pointer-events:none — Orb1: ${pri} opacity ${vc.orbOp} anim 14s — Orb2: ${sec} opacity 0.10 anim 18s
+3. [data-reveal] scroll reveal: opacity:0;transform:translateY(28px);transition:0.9s cubic-bezier(0.16,1,0.3,1);transition-delay:calc(var(--stagger,0)*120ms) + IntersectionObserver script
+4. Double-Bezel card: outer bg-white/5 ring-1 ring-white/5 p-1.5 rounded-[2rem] → inner shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] rounded-[calc(2rem-6px)]
+5. Button-in-Button: texto + <span> circular com seta ↗
+6. Floating island navbar: pill, fixed top-6, mx-auto, rounded-full, backdrop-blur, bg-black/80
+7. scroll-behavior:smooth + smooth scroll links
+
+BENTO ASSIMETRICO CSS (copiar exato — NUNCA 3 colunas iguais):
+.bento{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.bento-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:1.75rem;padding:2rem;transition:border-color 0.3s,transform 0.35s}
+.bento-card:hover{border-color:rgba(255,255,255,0.12);transform:translateY(-2px)}
+.bento-card.wide{grid-column:1/-1}
+Estrutura: [card][card tall] / [card wide] / [card][card]
+
+SECOES OBRIGATORIAS (minimo 8 — site curto = inaceitavel):
+1. Navbar floating pill (logo + links + CTA)
+2. Hero min-h-[100dvh] assimetrico (headline + sub + CTA + mesh bg)
+3. Stats/numeros (se dados reais existem)
+4. Features bento assimetrico (5 cards)
+5. Sobre a empresa (conteudo real)
+6. Como funciona / processo / produtos
+7. CTA section (radial gradient)
+8. Footer completo (dados reais)
+
+<head>: <script src="https://cdn.tailwindcss.com"></script> <script defer src="https://unpkg.com/alpinejs@3/dist/cdn.min.js"></script> Google Fonts ${dFont.replace(/ /g, '+')}+${bFont.replace(/ /g, '+')}. tailwind.config com cores e fonts.` },
+        { role: 'user', content: `EMPRESA: ${b.business?.name} — ${b.business?.sector}
+VIBE: ${vibe} — BG:${vc.bg} Text:${vc.text}
+CORES: primary=${pri} secondary=${sec} accent=${acc}
+FONT: display=${dFont} body=${bFont}
+LOGO: ${b.brand?.logo_url && b.brand.logo_url !== 'null' ? '<img src="' + b.brand.logo_url + '" class="h-6">' : '"' + b.business?.name + '" em font bold'}
+
+COPY:
+Headline: "${b.copy?.hero_headline}"
+Sub: "${b.copy?.hero_sub}"
+CTA: "${b.copy?.hero_cta}"
+
+FEATURES (bento assimetrico):
+${feats.map((f, i) => (i + 1) + '. ' + f.title + ': ' + f.desc).join('\n')}
+
+SOBRE: ${about.content || 'conteudo sobre a empresa'}
+CONTATO: ${contact.phone || ''} ${contact.email || ''} ${contact.address || ''}
+
+${imgSection}
+
+CONCEITO VIDEO: ${c.id} — ${c.name}. Cena: ${c.scene}. Mood: ${c.mood}
+Hero bg: mesh gradient (video sera adicionado depois)
+<!-- SUBSTITUIR: <video autoplay muted loop playsinline src="hero.mp4"> -->
+
+Gere o HTML COMPLETO agora. Minimo 8 secoes. <!DOCTYPE html> ate </html>.` }
       ] });
       stopAnim();
 
