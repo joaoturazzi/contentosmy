@@ -9,7 +9,8 @@ export async function POST(request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { model, messages, apiKey, maxTokens } = await request.json();
+    const { model, messages, apiKey: bodyKey, maxTokens } = await request.json();
+    const apiKey = bodyKey || process.env.OPENROUTER_API_KEY;
     if (!apiKey) return NextResponse.json({ error: 'OpenRouter API key is required' }, { status: 400 });
     if (!messages?.length) return NextResponse.json({ error: 'Messages are required' }, { status: 400 });
 

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, Inp, Sel, Btn, SLabel, Empty, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_STATUS, W4_MODELS } from '@/lib/constants';
@@ -11,16 +11,25 @@ export default function W4Rebirth({ w4, setW4 }) {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(null);
   const [result, setResult] = useState(null);
+  const [envKeys, setEnvKeys] = useState({ firecrawl: false, openrouter: false });
 
   const settings = w4.settings || [];
   const getKey = (k) => settings.find(s => s.key === k)?.value || '';
   const firecrawlKey = getKey('firecrawl_api_key');
   const openrouterKey = getKey('openrouter_api_key');
 
+  // Check env vars on mount
+  useEffect(() => {
+    fetch('/api/w4/keys').then(r => r.json()).then(setEnvKeys).catch(() => {});
+  }, []);
+
+  const hasFirecrawl = firecrawlKey || envKeys.firecrawl;
+  const hasOpenRouter = openrouterKey || envKeys.openrouter;
+
   const startRebirth = async () => {
     if (!url.trim()) { toast('Cole a URL do site'); return; }
-    if (!firecrawlKey) { toast('Configure a Firecrawl API key nas Configuracoes'); return; }
-    if (!openrouterKey) { toast('Configure a OpenRouter API key nas Configuracoes'); return; }
+    if (!hasFirecrawl) { toast('Configure a Firecrawl API key (Config ou .env.local)'); return; }
+    if (!hasOpenRouter) { toast('Configure a OpenRouter API key (Config ou .env.local)'); return; }
 
     const projectId = uid();
     const project = {
@@ -39,7 +48,7 @@ export default function W4Rebirth({ w4, setW4 }) {
       const scrapeRes = await fetch('/api/w4/scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, apiKey: firecrawlKey }),
+        body: JSON.stringify({ url, apiKey: firecrawlKey || '' }),
       });
       const scrapeData = await scrapeRes.json();
       if (scrapeData.error) throw new Error(scrapeData.error);
@@ -54,12 +63,12 @@ export default function W4Rebirth({ w4, setW4 }) {
 
       // Step 2: Brand Analysis
       setStep('analyzing');
-      const markdown = scrapeData.scrape?.data?.markdown || '';
+      const markdown = scrapeData.scrape?.data?.markdown || scrapeData.scrape?.markdown || '';
       const analysisRes = await fetch('/api/w4/llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey: openrouterKey,
+          apiKey: openrouterKey || '',
           model: W4_MODELS.analysis,
           maxTokens: 4096,
           messages: [
@@ -69,6 +78,7 @@ export default function W4Rebirth({ w4, setW4 }) {
         }),
       });
       const analysisData = await analysisRes.json();
+      if (analysisData.error) throw new Error(analysisData.error?.message || analysisData.error);
       const analysisContent = analysisData.choices?.[0]?.message?.content || '';
 
       let blueprint = {};
@@ -91,19 +101,19 @@ export default function W4Rebirth({ w4, setW4 }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey: openrouterKey,
+          apiKey: openrouterKey || '',
           model: W4_MODELS.code,
           maxTokens: 8192,
           messages: [
-            { role: 'system', content: buildSystemPrompt('site_rebirth', vibe) + `\n\nTASK: Generate a complete React + Tailwind CSS single-page site based on the brand blueprint. Use ONLY approved fonts. Use rewritten content from the blueprint. Apply ${W4_VIBES[vibe]?.label || vibe} vibe archetype with all soft-skill patterns (Double-Bezel, Button-in-Button, Scroll Entry, Fluid Island Nav). Include all mandatory states (Loading, Empty, Error). Output a single complete App.tsx file with all components inline.` },
+            { role: 'system', content: buildSystemPrompt('site_rebirth', vibe) + `\n\nTASK: Generate a complete React + Tailwind CSS single-page site based on the brand blueprint. Apply ${W4_VIBES[vibe]?.label || vibe} vibe archetype with all soft-skill patterns. Output a single complete App.tsx file with all components inline.` },
             { role: 'user', content: `Brand Blueprint:\n${JSON.stringify(blueprint, null, 2)}\n\nGenerate the complete App.tsx file.` },
           ],
         }),
       });
       const codeData = await codeRes.json();
+      if (codeData.error) throw new Error(codeData.error?.message || codeData.error);
       const generatedCode = codeData.choices?.[0]?.message?.content || '';
 
-      // Save output
       const output = {
         id: uid(), projectId, type: 'site_code',
         title: `${new URL(url).hostname} — Rebuilt`, content: generatedCode,
@@ -132,6 +142,7 @@ export default function W4Rebirth({ w4, setW4 }) {
         ),
       }));
       toast('Erro: ' + err.message);
+      setStep(null);
     }
     setLoading(false);
   };
@@ -140,6 +151,18 @@ export default function W4Rebirth({ w4, setW4 }) {
     <div>
       <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>Site Rebirth</h1>
       <p style={{ margin: '0 0 20px', fontSize: 13, color: '#888' }}>Cole uma URL e reconstrua o site com padrao $150k agency.</p>
+
+      {/* API status inline */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, fontSize: 12 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: hasFirecrawl ? '#1e8449' : '#c0392b' }} />
+          Firecrawl {hasFirecrawl ? (firecrawlKey ? '(salvo)' : '(env)') : 'pendente'}
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: hasOpenRouter ? '#1e8449' : '#c0392b' }} />
+          OpenRouter {hasOpenRouter ? (openrouterKey ? '(salvo)' : '(env)') : 'pendente'}
+        </span>
+      </div>
 
       <Card style={{ marginBottom: 20 }}>
         <SLabel>Input</SLabel>

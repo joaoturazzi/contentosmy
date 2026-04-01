@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, Txa, Sel, Btn, SLabel, Empty, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_MODELS } from '@/lib/constants';
@@ -11,13 +11,16 @@ export default function W4Components({ w4, setW4 }) {
   const [theme, setTheme] = useState('light');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [envKeys, setEnvKeys] = useState({ openrouter: false });
 
   const settings = w4.settings || [];
   const openrouterKey = settings.find(s => s.key === 'openrouter_api_key')?.value || '';
 
+  useEffect(() => { fetch('/api/w4/keys').then(r => r.json()).then(setEnvKeys).catch(() => {}); }, []);
+
   const generate = async () => {
     if (!desc.trim()) { toast('Descreva o componente'); return; }
-    if (!openrouterKey) { toast('Configure a OpenRouter API key'); return; }
+    if (!openrouterKey && !envKeys.openrouter) { toast('Configure a OpenRouter API key'); return; }
 
     const projectId = uid();
     const project = {
@@ -35,7 +38,7 @@ export default function W4Components({ w4, setW4 }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey: openrouterKey,
+          apiKey: openrouterKey || '',
           model: W4_MODELS.code,
           maxTokens: 8192,
           messages: [

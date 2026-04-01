@@ -1,4 +1,5 @@
 'use client';
+import { useState, useEffect } from 'react';
 import { Card, SLabel, Empty } from '../ui';
 import { W4_FUNC, W4_STATUS, W4_VIBES } from '@/lib/constants';
 
@@ -7,8 +8,11 @@ export default function W4Home({ w4, setW4, setPage }) {
   const recent = [...projects].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 5);
 
   const settings = w4.settings || [];
-  const hasFirecrawl = settings.some(s => s.key === 'firecrawl_api_key' && s.value);
-  const hasOpenRouter = settings.some(s => s.key === 'openrouter_api_key' && s.value);
+  const [envKeys, setEnvKeys] = useState({ firecrawl: false, openrouter: false });
+  useEffect(() => { fetch('/api/w4/keys').then(r => r.json()).then(setEnvKeys).catch(() => {}); }, []);
+
+  const hasFirecrawl = settings.some(s => s.key === 'firecrawl_api_key' && s.value) || envKeys.firecrawl;
+  const hasOpenRouter = settings.some(s => s.key === 'openrouter_api_key' && s.value) || envKeys.openrouter;
 
   return (
     <div>

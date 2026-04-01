@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, Inp, Txa, Sel, Btn, SLabel, Empty, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_MODELS } from '@/lib/constants';
@@ -12,16 +12,19 @@ export default function W4Brand({ w4, setW4 }) {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(null);
   const [result, setResult] = useState(null);
+  const [envKeys, setEnvKeys] = useState({ firecrawl: false, openrouter: false });
 
   const settings = w4.settings || [];
   const getKey = (k) => settings.find(s => s.key === k)?.value || '';
   const firecrawlKey = getKey('firecrawl_api_key');
   const openrouterKey = getKey('openrouter_api_key');
 
+  useEffect(() => { fetch('/api/w4/keys').then(r => r.json()).then(setEnvKeys).catch(() => {}); }, []);
+
   const startAudit = async () => {
     if (mode === 'url' && !url.trim()) { toast('Cole a URL'); return; }
     if (mode === 'text' && !text.trim()) { toast('Descreva a marca'); return; }
-    if (!openrouterKey) { toast('Configure a OpenRouter API key'); return; }
+    if (!openrouterKey && !envKeys.openrouter) { toast('Configure a OpenRouter API key'); return; }
 
     const projectId = uid();
     const project = {
@@ -39,12 +42,12 @@ export default function W4Brand({ w4, setW4 }) {
 
       // Step 1: Scrape if URL
       if (mode === 'url') {
-        if (!firecrawlKey) { toast('Configure Firecrawl API key para scraping'); return; }
+        if (!firecrawlKey && !envKeys.firecrawl) { toast('Configure Firecrawl API key para scraping'); return; }
         setStep('scraping');
         const res = await fetch('/api/w4/scrape', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, apiKey: firecrawlKey }),
+          body: JSON.stringify({ url, apiKey: firecrawlKey || '' }),
         });
         const data = await res.json();
         content = data.scrape?.data?.markdown || '';
@@ -57,7 +60,7 @@ export default function W4Brand({ w4, setW4 }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey: openrouterKey,
+          apiKey: openrouterKey || '',
           model: W4_MODELS.analysis,
           maxTokens: 4096,
           messages: [
@@ -81,7 +84,7 @@ export default function W4Brand({ w4, setW4 }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey: openrouterKey,
+          apiKey: openrouterKey || '',
           model: W4_MODELS.creative,
           maxTokens: 1024,
           messages: [

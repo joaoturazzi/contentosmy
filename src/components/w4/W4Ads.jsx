@@ -1,24 +1,27 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, Inp, Txa, Sel, Btn, SLabel, Empty, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_MODELS } from '@/lib/constants';
 import { buildSystemPrompt } from '@/lib/w4-system-prompt';
 
-const CHANNELS = { instagram: 'Instagram', linkedin: 'LinkedIn', youtube: 'YouTube', tiktok: 'TikTok' };
+const CHANNELS = { instagram: 'Instagram', linkedin: 'LinkedIn', youtube: 'YouTube', tiktok: 'TikTok', google_ads: 'Google Ads' };
 
 export default function W4Ads({ w4, setW4 }) {
   const [product, setProduct] = useState('');
   const [channel, setChannel] = useState('instagram');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [envKeys, setEnvKeys] = useState({ openrouter: false });
 
   const settings = w4.settings || [];
   const openrouterKey = settings.find(s => s.key === 'openrouter_api_key')?.value || '';
 
+  useEffect(() => { fetch('/api/w4/keys').then(r => r.json()).then(setEnvKeys).catch(() => {}); }, []);
+
   const generate = async () => {
     if (!product.trim()) { toast('Descreva o produto/servico'); return; }
-    if (!openrouterKey) { toast('Configure a OpenRouter API key'); return; }
+    if (!openrouterKey && !envKeys.openrouter) { toast('Configure a OpenRouter API key'); return; }
 
     const projectId = uid();
     const project = {
@@ -37,7 +40,7 @@ export default function W4Ads({ w4, setW4 }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey: openrouterKey,
+          apiKey: openrouterKey || '',
           model: W4_MODELS.creative,
           maxTokens: 4096,
           messages: [

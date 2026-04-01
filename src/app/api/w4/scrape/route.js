@@ -9,8 +9,9 @@ export async function POST(request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { url, apiKey } = await request.json();
+    const { url, apiKey: bodyKey } = await request.json();
     if (!url) return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+    const apiKey = bodyKey || process.env.FIRECRAWL_API_KEY;
     if (!apiKey) return NextResponse.json({ error: 'Firecrawl API key is required' }, { status: 400 });
 
     // Scrape

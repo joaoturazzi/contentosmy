@@ -9,7 +9,8 @@ export async function POST(request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { prompt, apiKey, model } = await request.json();
+    const { prompt, apiKey: bodyKey, model } = await request.json();
+    const apiKey = bodyKey || process.env.OPENROUTER_API_KEY;
     if (!apiKey) return NextResponse.json({ error: 'OpenRouter API key is required' }, { status: 400 });
     if (!prompt) return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
 
