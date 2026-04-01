@@ -32,6 +32,8 @@ export default function W4Rebirth({ w4, setW4 }) {
   const [stepMsg, setStepMsg] = useState('');
   const [blueprint, setBlueprint] = useState(null);
   const [selectedConcept, setSelectedConcept] = useState(null);
+  const [heroImageUrl, setHeroImageUrl] = useState(null);
+  const [generatingImage, setGeneratingImage] = useState(false);
   const [generatedHtml, setGeneratedHtml] = useState(null);
   const [htmlAudit, setHtmlAudit] = useState(null);
   const [pipelineStep, setPipelineStep] = useState(null); // {stepId, detail, pct}
@@ -62,7 +64,7 @@ export default function W4Rebirth({ w4, setW4 }) {
 
   // ═══ RESET ═══
   const resetAll = () => {
-    setScraped(null); setBlueprint(null); setSelectedConcept(null);
+    setScraped(null); setBlueprint(null); setSelectedConcept(null); setHeroImageUrl(null);
     setGeneratedHtml(null); setHtmlAudit(null); setError(null); setOutputId(null);
     setScrapeSteps([]); setStepMsg(''); setActiveTab('scrape');
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
@@ -109,6 +111,37 @@ export default function W4Rebirth({ w4, setW4 }) {
     setLoading(false);
   };
 
+  // ═══ PHASE 2.5: HERO IMAGE GENERATION ═══
+  const generateHeroImage = async (concept) => {
+    if (!concept?.image_prompt) return;
+    setGeneratingImage(true);
+    setHeroImageUrl(null);
+    try {
+      const prompt = concept.image_prompt
+        .replace(/\[.*?\]/g, blueprint.business?.main_product || 'product')
+        .slice(0, 500);
+      const imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=1200&height=675&nologo=true&model=flux';
+      // Pre-validate the image loads
+      const r = await fetch(imgUrl, { method: 'HEAD' });
+      if (r.ok) {
+        setHeroImageUrl(imgUrl);
+        toast('Hero image gerada');
+      } else {
+        throw new Error('Pollinations retornou ' + r.status);
+      }
+    } catch (e) {
+      console.warn('[heroImage]', e.message);
+      toast('Imagem nao disponivel — usando fallback visual');
+    }
+    setGeneratingImage(false);
+  };
+
+  const selectConcept = async (concept) => {
+    setSelectedConcept(concept);
+    setHeroImageUrl(null);
+    generateHeroImage(concept);
+  };
+
   // ═══ PHASE 3: HTML via 4-STEP PIPELINE ═══
   const startHtmlGen = async () => {
     if (!blueprint || !selectedConcept) return;
@@ -116,8 +149,13 @@ export default function W4Rebirth({ w4, setW4 }) {
     setLoading(true); setError(null); setActiveTab('html'); setHtmlAudit(null); setPipelineStep(null);
 
     try {
+      // Pass AI-generated hero image if available
+      const enrichedScraped = heroImageUrl
+        ? { ...scraped, aiHeroImage: heroImageUrl }
+        : scraped;
+
       const result = await runFullPipeline(
-        scraped, blueprint, vibe, orKey,
+        enrichedScraped, blueprint, vibe, orKey,
         (progress) => setPipelineStep(progress)
       );
 
@@ -252,14 +290,28 @@ export default function W4Rebirth({ w4, setW4 }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
                 {(blueprint.video_concepts || []).map(c => {
                   const sel = selectedConcept?.id === c.id;
-                  return (<Card key={c.id} onClick={() => setSelectedConcept(c)} style={{ cursor: 'pointer', border: sel ? '2px solid #3B82F6' : '1px solid #eceae5', background: sel ? '#eaf2fb' : '#fff', transition: 'all .12s' }}>
+                  return (<Card key={c.id} onClick={() => selectConcept(c)} style={{ cursor: 'pointer', border: sel ? '2px solid #3B82F6' : '1px solid #eceae5', background: sel ? '#eaf2fb' : '#fff', transition: 'all .12s' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}><span style={{ width: 22, height: 22, borderRadius: 5, background: sel ? '#3B82F6' : '#f4f4f3', color: sel ? '#fff' : '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>{c.id}</span><p style={{ margin: 0, fontSize: 12, fontWeight: 700 }}>{c.name}</p></div>
                     <p style={{ margin: '0 0 3px', fontSize: 11, color: '#555' }}>{c.scene}</p>
                     <p style={{ margin: 0, fontSize: 10, color: '#888' }}>Camera: {c.camera} | Mood: {c.mood}</p>
                   </Card>);
                 })}
               </div>
-              {selectedConcept ? <Btn onClick={startHtmlGen} style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}>{loading ? 'Gerando...' : `Gerar site com conceito ${selectedConcept.id} →`}</Btn> : <p style={{ fontSize: 12, color: '#888', textAlign: 'center' }}>Selecione um conceito</p>}
+              {/* Hero Image Preview */}
+              {selectedConcept && (
+                <Card style={{ marginBottom: 14 }}>
+                  <SLabel>Hero Image (gerada por IA)</SLabel>
+                  {generatingImage && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3498DB' }} /><span style={{ fontSize: 12, color: '#1a5276' }}>Gerando imagem com FLUX Schnell...</span></div>}
+                  {heroImageUrl && !generatingImage && (
+                    <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #eceae5' }}>
+                      <img src={heroImageUrl} alt="Hero image gerada" style={{ width: '100%', height: 280, objectFit: 'cover', display: 'block' }} onError={e => { e.target.style.display = 'none'; }} />
+                    </div>
+                  )}
+                  {!heroImageUrl && !generatingImage && <p style={{ fontSize: 11, color: '#888', padding: '12px 0' }}>Imagem sera gerada automaticamente. Se falhar, o site usara gradient visual.</p>}
+                  {heroImageUrl && <button onClick={() => generateHeroImage(selectedConcept)} style={{ marginTop: 8, fontSize: 11, color: '#1a5276', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Regenerar imagem</button>}
+                </Card>
+              )}
+              {selectedConcept ? <Btn onClick={startHtmlGen} style={{ opacity: loading || generatingImage ? 0.6 : 1, pointerEvents: loading || generatingImage ? 'none' : 'auto' }}>{loading ? 'Gerando...' : generatingImage ? 'Aguardando imagem...' : `Gerar site com conceito ${selectedConcept.id} →`}</Btn> : <p style={{ fontSize: 12, color: '#888', textAlign: 'center' }}>Selecione um conceito</p>}
               <div style={{ marginTop: 12 }}><button onClick={() => setShowBpRaw(!showBpRaw)} style={{ fontSize: 10, color: '#888', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>{showBpRaw ? 'Fechar' : 'Ver JSON raw'}</button>{showBpRaw && <pre style={{ margin: '6px 0 0', fontSize: 9, color: '#555', overflow: 'auto', maxHeight: 200, background: '#fafaf8', padding: 8, borderRadius: 6, whiteSpace: 'pre-wrap' }}>{JSON.stringify(blueprint, null, 2)}</pre>}</div>
             </>
           )}
