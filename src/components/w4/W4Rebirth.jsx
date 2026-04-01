@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Card, Inp, Sel, Btn, SLabel, Empty, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_STATUS, W4_MODELS } from '@/lib/constants';
+import { buildSystemPrompt } from '@/lib/w4-system-prompt';
 
 export default function W4Rebirth({ w4, setW4 }) {
   const [url, setUrl] = useState('');
@@ -62,7 +63,7 @@ export default function W4Rebirth({ w4, setW4 }) {
           model: W4_MODELS.analysis,
           maxTokens: 4096,
           messages: [
-            { role: 'system', content: `You are a $150k agency brand strategist. Analyze the scraped website content and produce a JSON brand_blueprint with these exact fields: sector, tone_of_voice (3 adjectives), color_palette (primary, secondary, accent — hex codes), typography (display_font, body_font from approved list: Geist, Outfit, Cabinet Grotesk, Satoshi, Clash Display, Plus Jakarta Sans), sections (array of {id, title, rewritten_content}), tagline, weaknesses (array of current design flaws), vibe_recommendation. Target vibe: ${vibe}. Output ONLY valid JSON.` },
+            { role: 'system', content: buildSystemPrompt('site_rebirth', vibe) + `\n\nTASK: Analyze the scraped website content and produce a JSON brand_blueprint with these exact fields: sector, tone_of_voice (3 adjectives), color_palette (primary, secondary, accent — hex codes), typography (display_font, body_font from approved fonts only), sections (array of {id, title, rewritten_content}), tagline, weaknesses (array of current design flaws), vibe_recommendation. Target vibe: ${vibe}. Apply redesign-skill red flags detection. Output ONLY valid JSON.` },
             { role: 'user', content: `Website URL: ${url}\n\nScraped content:\n${markdown.slice(0, 6000)}` },
           ],
         }),
@@ -94,7 +95,7 @@ export default function W4Rebirth({ w4, setW4 }) {
           model: W4_MODELS.code,
           maxTokens: 8192,
           messages: [
-            { role: 'system', content: `You are an elite frontend engineer. Generate a complete React + Tailwind CSS single-page site based on the brand blueprint provided. Rules: Use ONLY fonts from this list: Geist, Outfit, Cabinet Grotesk, Satoshi, Clash Display, Plus Jakarta Sans. NEVER use Inter, Roboto, Arial. No placeholder text. No lorem ipsum. Use the rewritten content from the blueprint. Apply ${vibe} vibe archetype. Mobile-first. Use min-h-[100dvh] not h-screen. Use CSS Grid not flexbox percentage math. Output a single complete App.tsx file with all components inline. Include Tailwind classes only.` },
+            { role: 'system', content: buildSystemPrompt('site_rebirth', vibe) + `\n\nTASK: Generate a complete React + Tailwind CSS single-page site based on the brand blueprint. Use ONLY approved fonts. Use rewritten content from the blueprint. Apply ${W4_VIBES[vibe]?.label || vibe} vibe archetype with all soft-skill patterns (Double-Bezel, Button-in-Button, Scroll Entry, Fluid Island Nav). Include all mandatory states (Loading, Empty, Error). Output a single complete App.tsx file with all components inline.` },
             { role: 'user', content: `Brand Blueprint:\n${JSON.stringify(blueprint, null, 2)}\n\nGenerate the complete App.tsx file.` },
           ],
         }),

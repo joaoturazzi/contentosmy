@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Card, Inp, Txa, Sel, Btn, SLabel, Empty, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_MODELS } from '@/lib/constants';
+import { buildSystemPrompt } from '@/lib/w4-system-prompt';
 
 const CHANNELS = { instagram: 'Instagram', linkedin: 'LinkedIn', youtube: 'YouTube', tiktok: 'TikTok' };
 
@@ -40,23 +41,9 @@ export default function W4Ads({ w4, setW4 }) {
           model: W4_MODELS.creative,
           maxTokens: 4096,
           messages: [
-            { role: 'system', content: `You are an elite creative director. Generate 3 ad concepts for the given product/service and channel. Output JSON with this exact structure:
-{
-  "concepts": [
-    {
-      "name": "Concept A - Emotional",
-      "approach": "storytelling",
-      "headline": "max 8 words",
-      "subheadline": "max 15 words",
-      "cta": "max 4 words",
-      "caption": "social media caption with hashtags",
-      "ab_variations": {"headline_b": "alternative headline", "cta_b": "alternative CTA"},
-      "video_script": [{"time": "0s-2s", "visual": "description", "text_overlay": "if any", "transition": "type"}],
-      "image_prompt": "detailed prompt for FLUX image generation"
-    }
-  ]
-}
-Rules: No cliches (Elevate, Seamless, Unleash, Next-Gen, Game-changer). No emojis. Numbers must be organic (not round). Channel: ${CHANNELS[channel]}.` },
+            { role: 'system', content: buildSystemPrompt('ad_generator') + `\n\nTASK: Generate 3 ad concepts. Output JSON:
+{"concepts": [{"name": "Concept A - Emotional", "approach": "storytelling", "headline": "max 8 words", "subheadline": "max 15 words", "cta": "max 4 words", "caption": "120-180 chars + hashtags", "ab_variations": {"headline_b": "alt", "cta_b": "alt"}, "linkedin_version": "professional tone adaptation", "instagram_version": "visual/emotional adaptation", "video_script": [{"time": "0s-2s", "visual": "desc", "text_overlay": "if any", "transition": "type"}], "image_prompt": "detailed FLUX prompt with aspect ratio"}]}
+3 concepts: A-Emotional (storytelling), B-Rational (problem>solution>proof), C-Disruptive (pattern interrupt). Channel: ${CHANNELS[channel]}.` },
             { role: 'user', content: `Product/Service: ${product}\nChannel: ${CHANNELS[channel]}` },
           ],
         }),

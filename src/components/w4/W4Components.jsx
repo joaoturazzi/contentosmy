@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Card, Txa, Sel, Btn, SLabel, Empty, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_MODELS } from '@/lib/constants';
+import { buildSystemPrompt } from '@/lib/w4-system-prompt';
 
 export default function W4Components({ w4, setW4 }) {
   const [desc, setDesc] = useState('');
@@ -38,20 +39,7 @@ export default function W4Components({ w4, setW4 }) {
           model: W4_MODELS.code,
           maxTokens: 8192,
           messages: [
-            { role: 'system', content: `You are an elite frontend engineer creating $150k agency-level React + Tailwind components. Rules:
-- NEVER use Inter, Roboto, Arial, Open Sans, Helvetica, Times New Roman, Georgia, Garamond
-- Approved fonts: Geist, Outfit, Cabinet Grotesk, Satoshi, Clash Display, Plus Jakarta Sans
-- Use min-h-[100dvh] not h-screen
-- Use CSS Grid not flexbox percentage math
-- Buttons: active:-translate-y-[1px] or active:scale-[0.98]
-- No #000000 pure black — use #111111 or zinc-950
-- No purple/blue neon gradient
-- Include hover, focus, active states
-- Include loading, empty, error states
-- Mobile-first responsive
-- Zero comments, zero placeholders, zero TODO
-- Output a single complete .tsx file ready to import
-Vibe: ${W4_VIBES[vibe]?.label || vibe}. Theme: ${theme}.` },
+            { role: 'system', content: buildSystemPrompt('ui_factory', vibe) + `\n\nTASK: Generate a complete, isolated React + Tailwind v3 component. Apply ${W4_VIBES[vibe]?.label || vibe} vibe. Theme: ${theme}. Include all mandatory states (Loading shimmer, Empty with guidance, Error with recovery). Include hover/focus/active micro-interactions. Mobile-first responsive. Output a single complete .tsx file ready to import. Include CSS variables needed in globals.css as a comment at the top.` },
             { role: 'user', content: `Component request: ${desc}\nVibe: ${vibe}\nTheme: ${theme}` },
           ],
         }),

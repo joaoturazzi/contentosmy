@@ -13,8 +13,10 @@ export default function W4Home({ w4, setW4, setPage }) {
   return (
     <div>
       <div style={{ marginBottom: 28 }}>
+        <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: '#aaa', textTransform: 'uppercase' }}>Workspace 4</p>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em' }}>Cinematic Agency Engine</h1>
-        <p style={{ margin: '6px 0 0', fontSize: 13, color: '#888' }}>Transforme inputs simples em produtos digitais premium.</p>
+        <p style={{ margin: '6px 0 0', fontSize: 13, color: '#888' }}>Transforme inputs simples em produtos digitais premium. Padrao minimo: $150k agency.</p>
+        <p style={{ margin: '4px 0 0', fontSize: 11, color: '#bbb' }}>v3.0 — 7 skills: taste + redesign + soft + stitch + minimalist + brutalist + output</p>
       </div>
 
       {/* API status */}

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Card, Inp, Txa, Sel, Btn, SLabel, Empty, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_MODELS } from '@/lib/constants';
+import { buildSystemPrompt } from '@/lib/w4-system-prompt';
 
 export default function W4Brand({ w4, setW4 }) {
   const [mode, setMode] = useState('url');
@@ -60,17 +61,7 @@ export default function W4Brand({ w4, setW4 }) {
           model: W4_MODELS.analysis,
           maxTokens: 4096,
           messages: [
-            { role: 'system', content: `You are a $150k brand strategist. Create a complete Brand Book 2.0 in JSON format with these exact fields:
-- sector: string
-- positioning: string (1-2 sentences)
-- primary_palette: [{name, hex, usage}] (3 colors)
-- expanded_palette: [{name, hex, usage}] (6 colors)
-- typography: {display_font, body_font} (from: Geist, Outfit, Cabinet Grotesk, Satoshi, Clash Display, Plus Jakarta Sans, Fraunces, Instrument Serif)
-- tone_of_voice: {adjectives: [3], dos: [3 example phrases], donts: [3 example phrases]}
-- moodboard: [{reference, description}] (5 items)
-- tagline: string
-- brand_tokens: {spacing, radius, shadows}
-Output ONLY valid JSON.` },
+            { role: 'system', content: buildSystemPrompt('brand_audit') + `\n\nTASK: Create a complete Brand Book 2.0 in JSON with these fields: sector, positioning (1-2 sentences), primary_palette [{name, hex, usage}] (3 colors, max 1 accent, saturation<80%), expanded_palette [{name, hex, usage}] (6 colors with hex+RGB+HSL), typography {display_font, body_font} (from approved fonts ONLY), tone_of_voice {adjectives: [3], dos: [5 example phrases], donts: [5 example phrases]}, moodboard [{reference, description}] (5 items), tagline + 2 variations, social_slogan, brand_tokens {colors_rgb, colors_hsl, font_stacks, type_scale, spacing_scale, radius_scale, shadow_scale}. Output ONLY valid JSON.` },
             { role: 'user', content: `Brand input:\n${content.slice(0, 6000)}` },
           ],
         }),
