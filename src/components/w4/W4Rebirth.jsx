@@ -15,33 +15,75 @@ export default function W4Rebirth({ w4, setW4 }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [debug, setDebug] = useState('');
 
   useEffect(() => { return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }; }, [previewUrl]);
 
   const settings = w4.settings || [];
   const getKey = (k) => settings.find(s => s.key === k)?.value || '';
+  const orKey = getKey('openrouter_api_key');
+  const fcKey = getKey('firecrawl_api_key');
+
+  const log = (msg) => {
+    console.log(`[W4 Rebirth] ${msg}`);
+    setDebug(d => d + '\n' + msg);
+  };
+
+  const testConnection = async () => {
+    setDebug('');
+    log(`Settings count: ${settings.length}`);
+    log(`OpenRouter key: ${orKey ? orKey.slice(0, 8) + '...' + orKey.slice(-4) : 'EMPTY'}`);
+    log(`Firecrawl key: ${fcKey ? fcKey.slice(0, 8) + '...' + fcKey.slice(-4) : 'EMPTY'}`);
+
+    if (!orKey) {
+      log('ERROR: OpenRouter key not found in w4.settings. Go to Config and save it.');
+      return;
+    }
+
+    try {
+      log('Testing OpenRouter direct call...');
+      const content = await callLLM({
+        apiKey: orKey,
+        model: 'deepseek/deepseek-chat',
+        maxTokens: 50,
+        messages: [{ role: 'user', content: 'Reply with just "OK"' }],
+      });
+      log(`OpenRouter response: "${content}"`);
+      log('SUCCESS: OpenRouter is working!');
+    } catch (err) {
+      log(`ERROR: ${err.message}`);
+    }
+  };
 
   const startRebirth = async () => {
     const fullUrl = ensureUrl(url);
     if (!fullUrl) { toast('Cole a URL do site'); return; }
+    if (!orKey) { toast('Configure a OpenRouter API key na aba Config'); return; }
 
     setLoading(true);
     setStep('scraping');
     setError(null);
     setResult(null);
+    setDebug('');
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
 
     const projectId = uid();
     const hostname = safeHostname(fullUrl);
+    log(`Starting rebirth for ${hostname}`);
+    log(`Vibe: ${vibe}`);
+    log(`OpenRouter key present: ${!!orKey}`);
 
     try {
       // Step 1: Scrape
-      const { markdown } = await callScrape({ url: fullUrl, apiKey: getKey('firecrawl_api_key') });
+      log('Step 1: Scraping with Firecrawl...');
+      const { markdown } = await callScrape({ url: fullUrl, apiKey: fcKey });
+      log(`Scrape done: ${markdown.length} chars`);
 
       // Step 2: Brand Analysis
       setStep('analyzing');
+      log('Step 2: Brand analysis with Gemini Flash (direct browser call)...');
       const analysisRaw = await callLLM({
-        apiKey: getKey('openrouter_api_key'),
+        apiKey: orKey,
         model: W4_MODELS.analysis,
         maxTokens: 2000,
         messages: [
@@ -49,50 +91,66 @@ export default function W4Rebirth({ w4, setW4 }) {
           { role: 'user', content: `${fullUrl}\n\n${markdown.slice(0, 3000)}` },
         ],
       });
+      log(`Brand analysis done: ${analysisRaw.length} chars`);
       const { parsed: bp } = parseJSON(analysisRaw);
       const blueprint = bp || { sector: 'Tech', tagline: hostname, palette: { primary: '#050505', secondary: '#1A1A1A', accent: '#3B82F6' }, fonts: { display: 'Outfit', body: 'Satoshi' }, sections: [] };
+      log(`Blueprint parsed: sector=${blueprint.sector}, sections=${blueprint.sections?.length || 0}`);
 
-      // Step 3: Generate HTML site (NOT React — pure HTML+Tailwind+AlpineJS)
+      // Step 3: Generate HTML site
       setStep('generating');
       const vibeLabel = W4_VIBES[vibe]?.label || vibe;
+      const pri = blueprint.palette?.primary || '#050505';
+      const sec = blueprint.palette?.secondary || '#1A1A1A';
+      const acc = blueprint.palette?.accent || '#3B82F6';
+      const dFont = (blueprint.fonts?.display || 'Outfit').replace(/ /g, '+');
+      const bFont = (blueprint.fonts?.body || 'Satoshi').replace(/ /g, '+');
+      log(`Step 3: Generating HTML with Gemini Flash (maxTokens=8000)...`);
+
       const code = await callLLM({
-        apiKey: getKey('openrouter_api_key'),
+        apiKey: orKey,
         model: W4_MODELS.code,
         maxTokens: 8000,
         messages: [
           { role: 'system', content: buildSystemPrompt('site_rebirth', vibe) + `
 
-CRITICAL: Generate a COMPLETE standalone HTML page. NOT React. Pure HTML + Tailwind CSS classes + Alpine.js for interactivity.
+Generate a COMPLETE standalone HTML page. Pure HTML + Tailwind CSS + Alpine.js.
 
-OUTPUT FORMAT: A complete HTML document starting with <!DOCTYPE html> and ending with </html>. Include:
-- <script src="https://cdn.tailwindcss.com"></script>
-- <script defer src="https://unpkg.com/alpinejs@3/dist/cdn.min.js"></script>
-- Google Fonts link for ${blueprint.fonts?.display || 'Outfit'} and ${blueprint.fonts?.body || 'Satoshi'}
-- Tailwind config with custom font families
+MANDATORY <head> includes (copy exactly):
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://unpkg.com/alpinejs@3/dist/cdn.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=${dFont}:wght@400;500;600;700;800&family=${bFont}:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>tailwind.config={theme:{extend:{colors:{primary:'${pri}',secondary:'${sec}',accent:'${acc}'},fontFamily:{sans:['${blueprint.fonts?.display || 'Outfit'}','${blueprint.fonts?.body || 'Satoshi'}','system-ui']}}}}</script>
+
+Use Tailwind utility classes with these custom colors: bg-primary, bg-secondary, bg-accent, text-primary, text-accent, etc.
+Background: bg-primary (${pri}). Text: text-white. Accent: text-accent (${acc}).
 
 REQUIRED SECTIONS:
-1. Navbar with logo text and navigation links (use Alpine.js x-data for mobile menu toggle)
-2. Hero section — ${vibeLabel} vibe. Asymmetric layout. Large headline with tagline. CTA button.
-3. Features/Value props section — Bento-style asymmetric grid, NOT 3 equal cards
-4. Social proof / case studies section
-5. CTA section
+1. Navbar — fixed, backdrop-blur, logo + nav links + accent CTA, Alpine.js x-data mobile menu
+2. Hero — min-h-[100dvh], ${vibeLabel} vibe, asymmetric (text left 60%, visual right 40%), large headline, tagline, CTA button
+3. Features — bento-style grid (NOT 3 equal cards), 4 items with icons, descriptions
+4. Social proof / stats section
+5. CTA section with accent background
 6. Footer with links
 
-STYLE: ${vibeLabel} vibe. Colors: primary=${blueprint.palette?.primary || '#050505'}, secondary=${blueprint.palette?.secondary || '#1A1A1A'}, accent=${blueprint.palette?.accent || '#3B82F6'}.
-Use the REAL content from the blueprint sections below. No placeholder text. No Lorem Ipsum.
-Add hover transitions on all interactive elements. Use fade-in animations via CSS classes.
-COMPLETE code from <!DOCTYPE html> to </html>. No truncation. No markdown backticks.` },
-          { role: 'user', content: `Brand: ${JSON.stringify(blueprint).slice(0, 2000)}\n\nGenerate the complete HTML page now.` },
+MUST include: hover:scale-105 on cards, transition-all duration-300, smooth scroll, responsive (mobile collapse).
+Use REAL content from the brand data. No Lorem Ipsum.
+Start with <!DOCTYPE html> end with </html>. No markdown backticks.` },
+          { role: 'user', content: `Brand: ${JSON.stringify(blueprint).slice(0, 2000)}\n\nGenerate the complete premium HTML page.` },
         ],
       });
+      log(`Code generation done: ${code.length} chars`);
+      log(`Code starts with: ${code.slice(0, 50)}...`);
+      log(`Code ends with: ...${code.slice(-50)}`);
 
       // Validate
       if (!isCodeComplete(code)) {
-        throw new Error('Codigo gerado incompleto. O modelo pode ter excedido o limite de tokens. Tente novamente.');
+        log('WARNING: Code appears incomplete');
+        // Don't throw — still try to render what we got
       }
 
       // Build preview
       const html = buildPreviewHTML(code, `${hostname} — Rebuilt`);
+      log(`Preview HTML: ${html.length} chars`);
       const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
 
       // Save
@@ -108,9 +166,11 @@ COMPLETE code from <!DOCTYPE html> to </html>. No truncation. No markdown backti
 
       setResult({ blueprint, code, html });
       setPreviewUrl(blobUrl);
+      log('DONE! Site rebirth complete.');
       toast('Site Rebirth completo');
     } catch (err) {
       const msg = err.message || 'Erro desconhecido';
+      log(`ERROR: ${msg}`);
       setError(msg);
       toast('Erro: ' + msg.slice(0, 80));
     }
@@ -121,7 +181,20 @@ COMPLETE code from <!DOCTYPE html> to </html>. No truncation. No markdown backti
   return (
     <div>
       <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>Site Rebirth</h1>
-      <p style={{ margin: '0 0 20px', fontSize: 13, color: '#888' }}>Cole uma URL e reconstrua o site com padrao $150k agency.</p>
+      <p style={{ margin: '0 0 16px', fontSize: 13, color: '#888' }}>Cole uma URL e reconstrua o site com padrao $150k agency.</p>
+
+      {/* Status indicators */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, fontSize: 12 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: fcKey ? '#1e8449' : '#c0392b' }} />
+          Firecrawl {fcKey ? '(salvo)' : '(sem key)'}
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: orKey ? '#1e8449' : '#c0392b' }} />
+          OpenRouter {orKey ? `(salvo — ${orKey.slice(0, 6)}...)` : '(sem key — configure na Config)'}
+        </span>
+        <button onClick={testConnection} style={{ fontSize: 11, color: '#1a5276', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Testar conexao</button>
+      </div>
 
       <Card style={{ marginBottom: 20 }}>
         <SLabel>Input</SLabel>
@@ -132,7 +205,7 @@ COMPLETE code from <!DOCTYPE html> to </html>. No truncation. No markdown backti
           </Sel>
           <Btn onClick={startRebirth} style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}>{loading ? 'Processando...' : 'Iniciar Rebirth'}</Btn>
         </div>
-        {step && <p style={{ margin: 0, fontSize: 12, color: '#1a5276', fontWeight: 600 }}>{step === 'scraping' ? '1/3 Scraping com Firecrawl...' : step === 'analyzing' ? '2/3 Analisando brand...' : '3/3 Gerando site (HTML+Tailwind)...'}</p>}
+        {step && <p style={{ margin: 0, fontSize: 12, color: '#1a5276', fontWeight: 600 }}>{step === 'scraping' ? '1/3 Scraping com Firecrawl...' : step === 'analyzing' ? '2/3 Analisando brand (DeepSeek)...' : '3/3 Gerando HTML (Qwen — aguarde ~30s)...'}</p>}
         {error && !loading && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#c0392b', background: '#fdf2f2', padding: '8px 12px', borderRadius: 6 }}>{error}</p>}
       </Card>
 
@@ -150,6 +223,17 @@ COMPLETE code from <!DOCTYPE html> to </html>. No truncation. No markdown backti
           );
         })}
       </div>
+
+      {/* Debug log */}
+      {debug && (
+        <Card style={{ marginBottom: 16, background: '#fafaf8' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <SLabel style={{ margin: 0 }}>Debug Log</SLabel>
+            <button onClick={() => setDebug('')} style={{ fontSize: 11, color: '#888', background: 'none', border: 'none', cursor: 'pointer' }}>Limpar</button>
+          </div>
+          <pre style={{ margin: 0, fontSize: 10, color: '#555', overflow: 'auto', maxHeight: 150, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{debug.trim()}</pre>
+        </Card>
+      )}
 
       {/* PREVIEW */}
       {previewUrl && (
@@ -175,10 +259,10 @@ COMPLETE code from <!DOCTYPE html> to </html>. No truncation. No markdown backti
       {result && (
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <SLabel style={{ margin: 0 }}>Codigo fonte ({result.code.length} caracteres)</SLabel>
-            <Btn sm onClick={() => { navigator.clipboard.writeText(result.html); toast('HTML completo copiado'); }}>Copiar HTML</Btn>
+            <SLabel style={{ margin: 0 }}>Codigo ({result.code.length} chars)</SLabel>
+            <Btn sm onClick={() => { navigator.clipboard.writeText(result.html); toast('HTML copiado'); }}>Copiar HTML</Btn>
           </div>
-          <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 300, background: '#fafaf8', padding: 12, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{result.code.slice(0, 3000)}{result.code.length > 3000 ? '\n\n... (truncado para visualizacao — use Copiar para o codigo completo)' : ''}</pre>
+          <pre style={{ margin: 0, fontSize: 11, color: '#555', overflow: 'auto', maxHeight: 250, background: '#fafaf8', padding: 12, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{result.code.slice(0, 2000)}{result.code.length > 2000 ? '\n...' : ''}</pre>
         </Card>
       )}
     </div>
