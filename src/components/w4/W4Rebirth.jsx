@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, Inp, Sel, Btn, SLabel, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_MODELS } from '@/lib/constants';
@@ -16,27 +16,29 @@ export default function W4Rebirth({ w4, setW4 }) {
   const [error, setError] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
 
-  // Phased data
+  // Phase data
   const [scrapeSteps, setScrapeSteps] = useState([]);
   const [scraped, setScraped] = useState(null);
+  const [brandStepMsg, setBrandStepMsg] = useState('');
   const [blueprint, setBlueprint] = useState(null);
+  const [selectedConcept, setSelectedConcept] = useState(null);
   const [generatedHtml, setGeneratedHtml] = useState(null);
-
-  // Markdown raw collapsed
   const [showRaw, setShowRaw] = useState(false);
+  const [showBlueprintRaw, setShowBlueprintRaw] = useState(false);
+  const brandStepInterval = useRef(null);
 
-  useEffect(() => { return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }; }, [previewUrl]);
+  useEffect(() => { return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); clearInterval(brandStepInterval.current); }; }, [previewUrl]);
 
   const settings = w4.settings || [];
   const getKey = (k) => settings.find(s => s.key === k)?.value || '';
   const orKey = getKey('openrouter_api_key');
   const fcKey = getKey('firecrawl_api_key');
 
-  const updateStep = (id, done) => {
-    setScrapeSteps(prev => prev.map(s => s.id === id ? { ...s, done } : s));
-  };
+  const updateStep = (id, done) => setScrapeSteps(prev => prev.map(s => s.id === id ? { ...s, done } : s));
 
-  // ─── PHASE 1: SCRAPE ─────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // PHASE 1: SCRAPE
+  // ═══════════════════════════════════════════════════════════════
   const startScrape = async () => {
     const fullUrl = ensureUrl(url);
     if (!fullUrl) { toast('Cole a URL do site'); return; }
@@ -45,20 +47,19 @@ export default function W4Rebirth({ w4, setW4 }) {
     setError(null);
     setScraped(null);
     setBlueprint(null);
+    setSelectedConcept(null);
     setGeneratedHtml(null);
     setActiveTab('scrape');
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
 
-    const steps = [
+    setScrapeSteps([
       { id: 'scrape', label: 'Raspando conteudo principal...', done: false },
       { id: 'map', label: 'Mapeando subpaginas...', done: false },
       { id: 'parse', label: 'Extraindo cores, imagens e copy...', done: false },
       { id: 'done', label: 'Scraping concluido', done: false },
-    ];
-    setScrapeSteps(steps);
+    ]);
 
     try {
-      // Request 1 + 2: Scrape + Map in parallel via server proxy (needs server-side Firecrawl key)
       updateStep('scrape', 'loading');
       updateStep('map', 'loading');
 
@@ -77,99 +78,196 @@ export default function W4Rebirth({ w4, setW4 }) {
 
       updateStep('scrape', true);
       updateStep('map', true);
-
-      // Parse
       updateStep('parse', 'loading');
-      const parsed = parseScrapedData(data.scrape, data.map, fullUrl);
 
-      if (!parsed.markdown || parsed.markdown.length < 50) {
-        throw new Error('Nenhum conteudo extraido. Verifique se a URL esta acessivel.');
-      }
+      const parsed = parseScrapedData(data.scrape, data.map, fullUrl);
+      if (!parsed.markdown || parsed.markdown.length < 50) throw new Error('Nenhum conteudo extraido.');
 
       updateStep('parse', true);
       updateStep('done', true);
-
       setScraped(parsed);
-      toast(`Scraping concluido: ${parsed.images.length} imagens, ${parsed.colors.length} cores, ${parsed.headings.h1.length + parsed.headings.h2.length} headings`);
+      toast(`Scraping OK: ${parsed.images.length} imgs, ${parsed.colors.length} cores`);
     } catch (err) {
-      setError(err.message || 'Erro no scraping');
+      setError(err.message);
       toast('Erro: ' + (err.message || '').slice(0, 80));
     }
     setLoading(false);
   };
 
-  // ─── PHASE 2: BRAND ANALYSIS ─────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // PHASE 2: BRAND BLUEPRINT
+  // ═══════════════════════════════════════════════════════════════
   const startBrand = async () => {
     if (!scraped) { toast('Execute o scraping primeiro'); return; }
     if (!orKey) { toast('Configure a OpenRouter API key na Config'); return; }
 
     setLoading(true);
     setError(null);
+    setBlueprint(null);
+    setSelectedConcept(null);
     setActiveTab('brand');
+
+    // Animated loading steps
+    const brandMsgs = [
+      'Analisando identidade da marca...',
+      'Extraindo paleta e tipografia...',
+      'Reescrevendo copy...',
+      'Gerando 3 conceitos de video...',
+      'Finalizando blueprint...',
+    ];
+    let msgIdx = 0;
+    setBrandStepMsg(brandMsgs[0]);
+    brandStepInterval.current = setInterval(() => {
+      msgIdx = Math.min(msgIdx + 1, brandMsgs.length - 1);
+      setBrandStepMsg(brandMsgs[msgIdx]);
+    }, 2500);
 
     try {
       const raw = await callLLM({
         apiKey: orKey,
         model: W4_MODELS.analysis,
-        maxTokens: 3000,
+        maxTokens: 3500,
         messages: [
-          { role: 'system', content: buildSystemPrompt('site_rebirth', vibe) + `
+          {
+            role: 'system',
+            content: `Voce e um diretor de criacao senior de uma agencia de $150k.
+Voce recebe dados de scraping de um site existente e devolve um brand_blueprint JSON.
+Responda APENAS com JSON valido. Nenhuma palavra fora do JSON. Sem markdown, sem backticks.`
+          },
+          {
+            role: 'user',
+            content: `Analise este site e gere o brand_blueprint.
 
-Analyze the scraped website data and generate a brand_blueprint JSON.
+DADOS DO SCRAPING:
+URL: ${scraped.metadata.url}
+Titulo: ${scraped.metadata.title}
+Descricao: ${scraped.metadata.description}
+H1s: ${scraped.headings.h1.join(' | ')}
+H2s: ${scraped.headings.h2.slice(0, 6).join(' | ')}
+H3s: ${scraped.headings.h3.slice(0, 8).join(' | ')}
+Cores encontradas: ${scraped.colors.slice(0, 8).join(', ')}
+Fonts encontradas: ${scraped.fonts.join(', ')}
+Contato - telefones: ${scraped.contact.phones.join(', ')}
+Contato - emails: ${scraped.contact.emails.join(', ')}
+Logo URL: ${scraped.logoUrl || 'nao encontrada'}
+Subpaginas: ${scraped.subpages.slice(0, 8).join(', ')}
+Markdown do site:
+${scraped.markdown.slice(0, 6000)}
 
-OUTPUT ONLY valid JSON with this exact structure:
+VIBE ESCOLHIDO: ${vibe}
+(ethereal_glass = dark OLED, mesh gradients, glass cards | editorial_luxury = cream warm, big serif, grain | soft_structuralism = white/grey, bold grotesk, airy)
+
+Responda APENAS com este JSON preenchido com dados REAIS do site (nao invente):
+
 {
-  "business": { "name": "", "sector": "", "main_product": "", "tone_of_voice": "" },
+  "business": {
+    "name": "NOME_REAL",
+    "sector": "SETOR_REAL",
+    "location": "CIDADE_REAL ou null",
+    "main_product": "PRODUTO_PRINCIPAL_REAL",
+    "tone_of_voice": "3 adjetivos",
+    "target_audience": "QUEM_COMPRA"
+  },
   "brand": {
-    "colors": { "primary": "#hex", "secondary": "#hex", "accent": "#hex", "bg": "#050505", "surface": "#111111" },
-    "typography": { "display": "font name", "body": "font name" },
+    "colors": {
+      "primary": "#hex_do_site",
+      "secondary": "#hex_do_site",
+      "accent": "#hex_destaque",
+      "bg": "#050505",
+      "surface": "#111111"
+    },
+    "typography": {
+      "display": "font premium (nunca Inter/Roboto/Arial) — usar Outfit, Cabinet Grotesk, Satoshi, Clash Display ou Plus Jakarta Sans",
+      "body": "Outfit",
+      "mono": "JetBrains Mono"
+    },
     "vibe_archetype": "${vibe}",
-    "logo_url": "${scraped.logoUrl || ''}"
+    "logo_url": "${scraped.logoUrl || 'null'}"
   },
   "copy": {
-    "hero_headline": "max 8 words, compelling, no cliches",
-    "hero_sub": "max 20 words, specific",
-    "hero_cta": "max 4 words",
+    "hero_headline": "HEADLINE max 8 palavras sem cliches (Elevate, Seamless, etc)",
+    "hero_sub": "SUBHEADLINE 15-20 palavras proposta de valor clara",
+    "hero_cta": "CTA 3-4 palavras",
     "sections": [
-      { "id": "features", "items": [{"title":"","desc":""}] },
-      { "id": "about", "content": "" },
-      { "id": "social_proof", "content": "" }
+      {
+        "id": "features",
+        "items": [
+          {"title":"FEATURE_REAL_1","desc":"desc real"},
+          {"title":"FEATURE_REAL_2","desc":"desc real"},
+          {"title":"FEATURE_REAL_3","desc":"desc real"},
+          {"title":"FEATURE_REAL_4","desc":"desc real"}
+        ]
+      },
+      {"id":"about","title":"Titulo sobre","content":"Paragrafo real sobre a empresa"},
+      {"id":"contact","address":"ENDERECO_REAL","phone":"TEL_REAL","email":"EMAIL_REAL","hours":"HORARIOS"}
     ]
   },
-  "design_problems": ["problem 1", "problem 2"]
-}
-
-RULES:
-- Use REAL content from the scraped data. Do not invent facts.
-- Colors: extract from site OR suggest premium alternatives. No #000000, use #050505.
-- Fonts: only Outfit, Cabinet Grotesk, Satoshi, Plus Jakarta Sans, Clash Display.
-- Hero headline: rewrite to be magnetic. No "Elevate", "Seamless", "Unleash".
-- Business name: "${scraped.businessName}"
-- Logo URL: "${scraped.logoUrl || 'none found'}"
-- Contact: phones=${JSON.stringify(scraped.contact.phones)}, emails=${JSON.stringify(scraped.contact.emails)}
-- Site colors found: ${JSON.stringify(scraped.colors.slice(0, 6))}
-- Fonts found: ${JSON.stringify(scraped.fonts)}
-
-JSON ONLY, no markdown.` },
-          { role: 'user', content: `Website: ${scraped.metadata.url}\nTitle: ${scraped.metadata.title}\nDescription: ${scraped.metadata.description}\n\nContent:\n${scraped.markdown.slice(0, 4000)}` },
+  "problems_fixed": [
+    "PROBLEMA 1 do site atual e solucao",
+    "PROBLEMA 2 do site atual e solucao",
+    "PROBLEMA 3 do site atual e solucao"
+  ],
+  "video_concepts": [
+    {
+      "id": "A",
+      "name": "NOME_CRIATIVO",
+      "scene": "Descricao cena com produto real",
+      "camera": "Movimento de camera",
+      "lighting": "Iluminacao",
+      "mood": "Mood",
+      "image_prompt": "prompt ingles para FLUX: [PRODUTO_REAL], cinematic 8K, dramatic lighting, commercial photography, no text, no logos",
+      "video_prompt": "prompt ingles para Kling: slow cinematic [MOVIMENTO], smooth camera, professional commercial style"
+    },
+    {
+      "id": "B",
+      "name": "NOME_CRIATIVO_2",
+      "scene": "cena diferente",
+      "camera": "outro movimento",
+      "lighting": "outra iluminacao",
+      "mood": "outro mood",
+      "image_prompt": "prompt diferente",
+      "video_prompt": "prompt diferente"
+    },
+    {
+      "id": "C",
+      "name": "NOME_CRIATIVO_3",
+      "scene": "cena diferente",
+      "camera": "outro movimento",
+      "lighting": "outra iluminacao",
+      "mood": "outro mood",
+      "image_prompt": "prompt diferente",
+      "video_prompt": "prompt diferente"
+    }
+  ]
+}`
+          }
         ],
       });
 
+      clearInterval(brandStepInterval.current);
+      setBrandStepMsg('');
+
       const { parsed: bp } = parseJSON(raw);
-      if (!bp) throw new Error('Nao foi possivel parsear o blueprint. Tente novamente.');
+      if (!bp) throw new Error('JSON invalido retornado. Tente novamente.');
+      if (!bp.business?.name) throw new Error('Blueprint incompleto — sem nome do negocio.');
+
       setBlueprint(bp);
-      toast('Brand blueprint gerado');
+      toast('Brand blueprint gerado com sucesso');
     } catch (err) {
-      setError(err.message || 'Erro na analise');
+      clearInterval(brandStepInterval.current);
+      setBrandStepMsg('');
+      setError(err.message);
       toast('Erro: ' + (err.message || '').slice(0, 80));
     }
     setLoading(false);
   };
 
-  // ─── PHASE 3: HTML GENERATION ─────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // PHASE 3: HTML GENERATION
+  // ═══════════════════════════════════════════════════════════════
   const startHtmlGen = async () => {
-    if (!blueprint) { toast('Gere o brand blueprint primeiro'); return; }
-    if (!orKey) { toast('Configure a OpenRouter API key na Config'); return; }
+    if (!blueprint) { toast('Gere o blueprint primeiro'); return; }
+    if (!orKey) { toast('Configure a OpenRouter API key'); return; }
 
     setLoading(true);
     setError(null);
@@ -185,6 +283,7 @@ JSON ONLY, no markdown.` },
       const dFont = bp.brand?.typography?.display || 'Outfit';
       const bFont = bp.brand?.typography?.body || 'Satoshi';
       const vibeLabel = W4_VIBES[vibe]?.label || vibe;
+      const concept = selectedConcept || bp.video_concepts?.[0];
 
       const code = await callLLM({
         apiKey: orKey,
@@ -194,52 +293,46 @@ JSON ONLY, no markdown.` },
           { role: 'system', content: buildSystemPrompt('site_rebirth', vibe) + `
 
 Generate a COMPLETE standalone HTML page. Pure HTML + Tailwind CSS CDN + Alpine.js + vanilla JS.
+Start with <!DOCTYPE html> end with </html>. No markdown backticks. No React.
 
 MANDATORY <head>:
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://unpkg.com/alpinejs@3/dist/cdn.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=${dFont.replace(/ /g, '+')}:wght@300;400;500;600;700;800;900&family=${bFont.replace(/ /g, '+')}:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-MANDATORY Tailwind config:
 <script>tailwind.config={theme:{extend:{colors:{primary:'${pri}',secondary:'${sec}',accent:'${acc}',surface:'${surface}'},fontFamily:{display:['${dFont}','system-ui'],body:['${bFont}','system-ui']}}}}</script>
 
-VIBE: ${vibeLabel}. Background: ${bg}. Text: white/gray-300.
+VIBE: ${vibeLabel}. BG: ${bg}. Text: white.
 
-MANDATORY MODULES (implement ALL):
-1. FLOATING ISLAND NAVBAR — not full-width. Pill shape, fixed, top 1.5rem, centered, backdrop-blur, rounded-full. Logo text + links + CTA button. Alpine.js x-data for mobile menu.
-2. HERO — min-h-[100dvh], asymmetric layout. ${bp.copy?.hero_headline || 'Headline'} as large heading. ${bp.copy?.hero_sub || ''}. CTA button with accent bg.
-3. FEATURES BENTO GRID — NOT 3 equal cards. Asymmetric CSS grid. Use real features from blueprint.
-4. SOCIAL PROOF — stats or testimonials from real content.
-5. CTA SECTION — contrasting bg, compelling copy.
-6. FOOTER — with real contact info: ${JSON.stringify(scraped?.contact || {})}.
+MANDATORY SECTIONS:
+1. FLOATING ISLAND NAVBAR — pill shape, fixed top-6, mx-auto, rounded-full, backdrop-blur, bg-black/80. ${scraped?.logoUrl ? `<img src="${scraped.logoUrl}" class="h-6"> as logo` : `"${bp.business?.name}" as text logo`}. Nav links + accent CTA. Alpine.js x-data for mobile.
+2. HERO — min-h-[100dvh], bg-[${bg}]. Headline: "${bp.copy?.hero_headline}". Sub: "${bp.copy?.hero_sub}". CTA: "${bp.copy?.hero_cta}" with bg-accent. Asymmetric layout.
+3. FEATURES BENTO — asymmetric CSS grid (NOT 3 equal cards). Items: ${JSON.stringify(bp.copy?.sections?.find(s => s.id === 'features')?.items?.map(i => i.title) || [])}.
+4. ABOUT — "${bp.copy?.sections?.find(s => s.id === 'about')?.content || ''}".
+5. CTA SECTION — contrasting bg-accent.
+6. FOOTER — ${bp.copy?.sections?.find(s => s.id === 'contact')?.phone || ''} ${bp.copy?.sections?.find(s => s.id === 'contact')?.email || ''} ${bp.copy?.sections?.find(s => s.id === 'contact')?.address || ''}.
 
-MANDATORY CSS EFFECTS:
-- Grain overlay: body::after with fixed, pointer-events-none, noise SVG
-- IntersectionObserver for scroll reveals: translateY(32px) opacity-0 → revealed
-- Stagger delays: calc(var(--stagger) * 120ms)
-- Hover transitions: scale, opacity changes on cards and buttons
-- scroll-behavior: smooth on html
+MANDATORY CSS MODULES:
+- body::after grain overlay (fixed, pointer-events-none, noise SVG, opacity 0.025)
+- IntersectionObserver scroll reveals (translateY(32px) opacity-0 → revealed)
+- Stagger delays: style="--stagger:N" with calc(var(--stagger)*120ms)
+- Hover: scale-105 on cards, transition-all duration-300
+- scroll-behavior:smooth on html
+- Double-Bezel on feature cards (outer ring-1 ring-white/5 p-1.5 rounded-2xl → inner)
+- Button-in-Button on CTA (icon in circular wrapper)
 
-${scraped?.logoUrl ? `LOGO: Use <img src="${scraped.logoUrl}" alt="logo" class="h-8"> in navbar` : `LOGO: Use "${bp.business?.name || 'Brand'}" as text in navbar`}
-
-CONTENT: Use the REAL rewritten copy from the blueprint below. No Lorem Ipsum. No placeholder.
-COMPLETE HTML from <!DOCTYPE html> to </html>. No markdown backticks.` },
-          { role: 'user', content: `Blueprint:\n${JSON.stringify(bp).slice(0, 3000)}\n\nGenerate the complete premium HTML page.` },
+Output COMPLETE HTML. No truncation.` },
+          { role: 'user', content: `Blueprint: ${JSON.stringify(bp).slice(0, 2500)}\n\nGenerate the complete premium ${vibeLabel} HTML page.` },
         ],
       });
 
-      if (!isCodeComplete(code)) {
-        throw new Error('Codigo incompleto — o modelo pode ter excedido o limite. Tente novamente.');
-      }
+      if (!isCodeComplete(code)) throw new Error('Codigo incompleto. Tente novamente.');
 
       const html = buildPreviewHTML(code, `${safeHostname(url)} — Rebuilt`);
       const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
       if (previewUrl) URL.revokeObjectURL(previewUrl);
 
-      // Save to state
       const projectId = uid();
-      const outputId = uid();
-      const output = { id: outputId, projectId, type: 'site_code', title: `${safeHostname(url)} — Rebuilt (${vibeLabel})`, content: code, language: 'html', metadata: { vibe, url: ensureUrl(url) }, createdAt: new Date().toISOString() };
+      const output = { id: uid(), projectId, type: 'site_code', title: `${safeHostname(url)} — Rebuilt (${vibeLabel})`, content: code, language: 'html', metadata: { vibe, url: ensureUrl(url) }, createdAt: new Date().toISOString() };
       const project = { id: projectId, name: `Rebirth: ${safeHostname(url)}`, type: 'site_rebirth', status: 'complete', inputUrl: ensureUrl(url), inputText: '', inputChannel: '', vibe, brandBlueprint: bp, scrapedData: {}, outputContent: { code }, errorMessage: '', notes: '', createdAt: new Date().toISOString() };
       setW4(d => ({ ...d, projects: [project, ...d.projects], outputs: [output, ...d.outputs] }));
 
@@ -247,23 +340,25 @@ COMPLETE HTML from <!DOCTYPE html> to </html>. No markdown backticks.` },
       setPreviewUrl(blobUrl);
       toast('Site gerado com sucesso');
     } catch (err) {
-      setError(err.message || 'Erro na geracao');
+      setError(err.message);
       toast('Erro: ' + (err.message || '').slice(0, 80));
     }
     setLoading(false);
   };
 
-  // ─── RENDER ───────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════
   const tabs = [
     { id: 'scrape', label: 'Scrape', ready: true, done: !!scraped },
     { id: 'brand', label: 'Brand', ready: !!scraped, done: !!blueprint },
-    { id: 'html', label: 'HTML', ready: !!blueprint, done: !!generatedHtml },
+    { id: 'html', label: 'HTML', ready: !!blueprint && !!selectedConcept, done: !!generatedHtml },
   ];
 
   return (
     <div>
       <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>Site Rebirth</h1>
-      <p style={{ margin: '0 0 16px', fontSize: 13, color: '#888' }}>Cole uma URL. 3 passos: Scrape → Brand → HTML.</p>
+      <p style={{ margin: '0 0 16px', fontSize: 13, color: '#888' }}>3 fases: Scrape → Brand → HTML</p>
 
       {/* Input */}
       <Card style={{ marginBottom: 16 }}>
@@ -279,119 +374,91 @@ COMPLETE HTML from <!DOCTYPE html> to </html>. No markdown backticks.` },
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 2, marginBottom: 16 }}>
         {tabs.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
-            flex: 1, padding: '10px 16px', borderRadius: 6, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: 13,
+          <button key={tab.id} onClick={() => tab.ready && setActiveTab(tab.id)} style={{
+            flex: 1, padding: '10px 16px', borderRadius: 6, border: 'none', cursor: tab.ready ? 'pointer' : 'default', fontFamily: 'inherit', fontWeight: 600, fontSize: 13,
             background: activeTab === tab.id ? (tab.done ? '#eafaf1' : '#eaf2fb') : '#f4f4f3',
             color: activeTab === tab.id ? (tab.done ? '#1e8449' : '#1a5276') : tab.ready ? '#555' : '#ccc',
             opacity: tab.ready ? 1 : 0.5,
           }}>
-            {tab.done ? 'Done' : ''} {tab.label}
-            {tab.id === 'brand' && !tab.ready && <span style={{ fontSize: 10, marginLeft: 4 }}>(scrape primeiro)</span>}
-            {tab.id === 'html' && !tab.ready && <span style={{ fontSize: 10, marginLeft: 4 }}>(brand primeiro)</span>}
+            {tab.done && 'Done '}{tab.label}
           </button>
         ))}
       </div>
 
-      {/* Error */}
-      {error && !loading && (
-        <div style={{ padding: '10px 14px', borderRadius: 6, background: '#fdf2f2', marginBottom: 16, fontSize: 12, color: '#c0392b' }}>{error}</div>
-      )}
+      {error && !loading && <div style={{ padding: '10px 14px', borderRadius: 6, background: '#fdf2f2', marginBottom: 16, fontSize: 12, color: '#c0392b' }}>{error}</div>}
 
       {/* ═══ TAB: SCRAPE ═══ */}
       {activeTab === 'scrape' && (
         <div>
-          {/* Loading steps */}
           {scrapeSteps.length > 0 && !scraped && (
             <Card style={{ marginBottom: 16 }}>
               {scrapeSteps.map(step => (
                 <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: step.done === true ? '#1e8449' : step.done === 'loading' ? '#3498DB' : '#ccc', flexShrink: 0 }} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: step.done === true ? '#1e8449' : step.done === 'loading' ? '#3498DB' : '#ccc' }} />
                   <span style={{ fontSize: 13, color: step.done === true ? '#1e8449' : step.done === 'loading' ? '#1a5276' : '#888' }}>{step.label}</span>
                 </div>
               ))}
             </Card>
           )}
-
           {scraped && (
             <>
-              {/* Section 1: Metadata */}
               <Card style={{ marginBottom: 12 }}>
-                <SLabel>Status e metadados</SLabel>
-                <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <SLabel>Metadados</SLabel>
+                <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 3 }}>
                   <div><strong>URL:</strong> {scraped.metadata.url}</div>
                   <div><strong>Titulo:</strong> {scraped.metadata.title}</div>
-                  <div><strong>Descricao:</strong> {scraped.metadata.description || '(nenhuma)'}</div>
-                  <div><strong>Idioma:</strong> {scraped.metadata.language}</div>
-                  <div><strong>Subpaginas:</strong> {scraped.subpages.length}</div>
-                  <div><strong>Markdown:</strong> {scraped.markdown.length} chars</div>
+                  {scraped.metadata.description && <div><strong>Desc:</strong> {scraped.metadata.description}</div>}
+                  <div><strong>Subpaginas:</strong> {scraped.subpages.length} | <strong>Markdown:</strong> {scraped.markdown.length} chars</div>
                 </div>
               </Card>
-
-              {/* Section 2: Logo */}
               <Card style={{ marginBottom: 12 }}>
-                <SLabel>Logo detectada</SLabel>
+                <SLabel>Logo</SLabel>
                 {scraped.logoUrl ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <img src={scraped.logoUrl} alt="logo" style={{ maxHeight: 60, maxWidth: 200, background: '#f4f4f3', borderRadius: 6, padding: 8 }} onError={e => { e.target.style.display = 'none'; }} />
-                    <span style={{ fontSize: 11, color: '#888', wordBreak: 'break-all' }}>{scraped.logoUrl.slice(0, 80)}</span>
+                    <img src={scraped.logoUrl} alt="logo" style={{ maxHeight: 48, background: '#f4f4f3', borderRadius: 6, padding: 6 }} onError={e => { e.target.style.display = 'none'; }} />
+                    <span style={{ fontSize: 10, color: '#888', wordBreak: 'break-all' }}>{scraped.logoUrl.slice(0, 60)}</span>
                   </div>
-                ) : (
-                  <p style={{ fontSize: 13, color: '#888' }}>Logo nao detectada — sera usada como texto na Fase 3</p>
-                )}
+                ) : <p style={{ fontSize: 12, color: '#888' }}>Nao detectada — sera texto</p>}
               </Card>
-
-              {/* Section 3: Colors */}
               <Card style={{ marginBottom: 12 }}>
-                <SLabel>Paleta extraida ({scraped.colors.length} cores)</SLabel>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {scraped.colors.map((color, i) => (
+                <SLabel>Paleta ({scraped.colors.length} cores)</SLabel>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {scraped.colors.map((c, i) => (
                     <div key={i} style={{ textAlign: 'center' }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 6, background: color, border: '1px solid #eceae5' }} />
-                      <p style={{ margin: '2px 0 0', fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{color}</p>
+                      <div style={{ width: 36, height: 36, borderRadius: 6, background: c, border: '1px solid #eceae5' }} />
+                      <p style={{ margin: '2px 0 0', fontSize: 8, color: '#888', fontFamily: 'monospace' }}>{c}</p>
                     </div>
                   ))}
-                  {scraped.colors.length === 0 && <p style={{ fontSize: 12, color: '#888' }}>Nenhuma cor significativa encontrada</p>}
                 </div>
               </Card>
-
-              {/* Section 4: Images */}
               <Card style={{ marginBottom: 12 }}>
-                <SLabel>Imagens do site ({scraped.images.length})</SLabel>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {scraped.images.map((img, i) => (
-                    <a key={i} href={img} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
-                      <img src={img} alt="" style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #eceae5' }} onError={e => { e.target.style.display = 'none'; }} />
+                <SLabel>Imagens ({scraped.images.length})</SLabel>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {scraped.images.slice(0, 12).map((img, i) => (
+                    <a key={i} href={img} target="_blank" rel="noopener noreferrer">
+                      <img src={img} alt="" style={{ width: 72, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #eceae5' }} onError={e => { e.target.style.display = 'none'; }} />
                     </a>
                   ))}
-                  {scraped.images.length === 0 && <p style={{ fontSize: 12, color: '#888' }}>Nenhuma imagem encontrada</p>}
                 </div>
               </Card>
-
-              {/* Section 5: Content */}
               <Card style={{ marginBottom: 12 }}>
-                <SLabel>Conteudo principal</SLabel>
-                <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <SLabel>Conteudo</SLabel>
+                <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
                   {scraped.headings.h1.length > 0 && <div><strong>H1:</strong> {scraped.headings.h1.join(' | ')}</div>}
                   {scraped.headings.h2.length > 0 && <div><strong>H2:</strong> {scraped.headings.h2.slice(0, 5).join(' | ')}</div>}
-                  {scraped.contact.phones.length > 0 && <div><strong>Telefones:</strong> {scraped.contact.phones.join(', ')}</div>}
-                  {scraped.contact.emails.length > 0 && <div><strong>Emails:</strong> {scraped.contact.emails.join(', ')}</div>}
+                  {scraped.contact.phones.length > 0 && <div><strong>Tel:</strong> {scraped.contact.phones.join(', ')}</div>}
+                  {scraped.contact.emails.length > 0 && <div><strong>Email:</strong> {scraped.contact.emails.join(', ')}</div>}
                   {scraped.fonts.length > 0 && <div><strong>Fonts:</strong> {scraped.fonts.join(', ')}</div>}
                 </div>
               </Card>
-
-              {/* Section 6: Raw markdown */}
-              <Card style={{ marginBottom: 12 }}>
+              <Card style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <SLabel style={{ margin: 0 }}>Markdown raw</SLabel>
                   <button onClick={() => setShowRaw(!showRaw)} style={{ fontSize: 11, color: '#888', background: 'none', border: 'none', cursor: 'pointer' }}>{showRaw ? 'Fechar' : 'Expandir'}</button>
                 </div>
-                {showRaw && (
-                  <pre style={{ margin: '8px 0 0', fontSize: 10, color: '#555', overflow: 'auto', maxHeight: 300, background: '#fafaf8', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{scraped.markdown.slice(0, 5000)}</pre>
-                )}
+                {showRaw && <pre style={{ margin: '8px 0 0', fontSize: 9, color: '#555', overflow: 'auto', maxHeight: 200, background: '#fafaf8', padding: 8, borderRadius: 6, whiteSpace: 'pre-wrap' }}>{scraped.markdown.slice(0, 4000)}</pre>}
               </Card>
-
-              {/* Next step button */}
-              <Btn onClick={startBrand} style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}>{loading ? 'Analisando...' : 'Proximo: Gerar Brand Blueprint'}</Btn>
+              <Btn onClick={startBrand} style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}>{loading ? 'Analisando...' : 'Proximo: Gerar Brand Blueprint →'}</Btn>
             </>
           )}
         </div>
@@ -400,44 +467,104 @@ COMPLETE HTML from <!DOCTYPE html> to </html>. No markdown backticks.` },
       {/* ═══ TAB: BRAND ═══ */}
       {activeTab === 'brand' && (
         <div>
+          {loading && brandStepMsg && (
+            <Card style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3498DB' }} />
+                <span style={{ fontSize: 13, color: '#1a5276' }}>{brandStepMsg}</span>
+              </div>
+            </Card>
+          )}
           {!blueprint && !loading && scraped && (
             <div style={{ textAlign: 'center', padding: 40 }}>
-              <p style={{ fontSize: 14, color: '#888', marginBottom: 16 }}>Pronto para analisar a marca e gerar o blueprint.</p>
+              <p style={{ fontSize: 14, color: '#888', marginBottom: 16 }}>Dados do scraping prontos. Gere o blueprint da marca.</p>
               <Btn onClick={startBrand}>Gerar Brand Blueprint</Btn>
             </div>
           )}
-          {loading && activeTab === 'brand' && (
-            <Card><p style={{ fontSize: 13, color: '#1a5276' }}>Analisando marca com Gemini Flash...</p></Card>
-          )}
           {blueprint && (
             <>
-              <Card style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <SLabel style={{ margin: 0 }}>Brand Blueprint</SLabel>
-                  <Btn sm onClick={() => { navigator.clipboard.writeText(JSON.stringify(blueprint, null, 2)); toast('JSON copiado'); }}>Copiar</Btn>
+              {/* Brand Card Visual */}
+              <Card style={{ marginBottom: 16, background: '#0a0a0a', color: '#fff', borderColor: '#222' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                  {blueprint.brand?.logo_url && blueprint.brand.logo_url !== 'null' ? (
+                    <img src={blueprint.brand.logo_url} alt="logo" style={{ maxHeight: 40, borderRadius: 6 }} onError={e => { e.target.style.display = 'none'; }} />
+                  ) : null}
+                  <div>
+                    <p style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>{blueprint.business?.name || 'Brand'}</p>
+                    <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{blueprint.business?.sector}{blueprint.business?.location ? ` — ${blueprint.business.location}` : ''}</p>
+                  </div>
                 </div>
-                {blueprint.business?.name && <p style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 800 }}>{blueprint.business.name}</p>}
-                {blueprint.business?.sector && <p style={{ margin: '0 0 8px', fontSize: 13, color: '#888' }}>{blueprint.business.sector}</p>}
-                {blueprint.copy?.hero_headline && <p style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700, fontStyle: 'italic' }}>"{blueprint.copy.hero_headline}"</p>}
-                {blueprint.copy?.hero_sub && <p style={{ margin: '0 0 12px', fontSize: 13, color: '#888' }}>{blueprint.copy.hero_sub}</p>}
 
                 {/* Colors */}
-                {blueprint.brand?.colors && (
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                    {Object.entries(blueprint.brand.colors).map(([name, hex]) => (
-                      <div key={name} style={{ textAlign: 'center' }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 6, background: hex, border: '1px solid #eceae5' }} />
-                        <p style={{ margin: '2px 0 0', fontSize: 9, color: '#888' }}>{name}</p>
-                        <p style={{ margin: 0, fontSize: 9, color: '#aaa', fontFamily: 'monospace' }}>{hex}</p>
-                      </div>
+                <p style={{ margin: '0 0 6px', fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>Paleta</p>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  {blueprint.brand?.colors && Object.entries(blueprint.brand.colors).map(([name, hex]) => (
+                    <div key={name} style={{ textAlign: 'center' }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 8, background: hex, border: '1px solid rgba(255,255,255,0.1)' }} />
+                      <p style={{ margin: '3px 0 0', fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>{name}</p>
+                      <p style={{ margin: 0, fontSize: 9, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>{hex}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Typography */}
+                <p style={{ margin: '0 0 4px', fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>Tipografia</p>
+                <p style={{ margin: '0 0 16px', fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Display: <strong>{blueprint.brand?.typography?.display}</strong> · Body: <strong>{blueprint.brand?.typography?.body}</strong></p>
+
+                {/* Hero copy */}
+                <p style={{ margin: '0 0 4px', fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>Hero Copy</p>
+                <p style={{ margin: '0 0 4px', fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{blueprint.copy?.hero_headline}</p>
+                <p style={{ margin: '0 0 8px', fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>{blueprint.copy?.hero_sub}</p>
+                <span style={{ display: 'inline-block', padding: '8px 20px', borderRadius: 8, background: blueprint.brand?.colors?.accent || '#3B82F6', color: '#fff', fontSize: 13, fontWeight: 600 }}>{blueprint.copy?.hero_cta}</span>
+
+                {/* Problems fixed */}
+                {blueprint.problems_fixed?.length > 0 && (
+                  <div style={{ marginTop: 20 }}>
+                    <p style={{ margin: '0 0 6px', fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>Problemas corrigidos</p>
+                    {blueprint.problems_fixed.map((p, i) => (
+                      <p key={i} style={{ margin: '0 0 3px', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>• {p}</p>
                     ))}
                   </div>
                 )}
-
-                <pre style={{ margin: 0, fontSize: 10, color: '#555', overflow: 'auto', maxHeight: 250, background: '#fafaf8', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap' }}>{JSON.stringify(blueprint, null, 2)}</pre>
               </Card>
 
-              <Btn onClick={startHtmlGen} style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}>{loading ? 'Gerando HTML...' : 'Proximo: Gerar Site HTML'}</Btn>
+              {/* 3 Video Concepts */}
+              <SLabel>Conceitos de Hero Video — escolha um</SLabel>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+                {(blueprint.video_concepts || []).map(concept => {
+                  const isSelected = selectedConcept?.id === concept.id;
+                  return (
+                    <Card key={concept.id} onClick={() => setSelectedConcept(concept)} style={{
+                      cursor: 'pointer', border: isSelected ? '2px solid #3B82F6' : '1px solid #eceae5',
+                      background: isSelected ? '#eaf2fb' : '#fff', transition: 'all .15s',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                        <span style={{ width: 24, height: 24, borderRadius: 6, background: isSelected ? '#3B82F6' : '#f4f4f3', color: isSelected ? '#fff' : '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>{concept.id}</span>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>{concept.name}</p>
+                      </div>
+                      <p style={{ margin: '0 0 4px', fontSize: 12, color: '#555' }}>{concept.scene}</p>
+                      <p style={{ margin: '0 0 2px', fontSize: 11, color: '#888' }}>Camera: {concept.camera}</p>
+                      <p style={{ margin: '0 0 2px', fontSize: 11, color: '#888' }}>Luz: {concept.lighting}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: '#888' }}>Mood: {concept.mood}</p>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* Advance button */}
+              {selectedConcept ? (
+                <Btn onClick={startHtmlGen} style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}>
+                  {loading ? 'Gerando HTML...' : `Gerar site com conceito ${selectedConcept.id} →`}
+                </Btn>
+              ) : (
+                <p style={{ fontSize: 13, color: '#888', textAlign: 'center' }}>Selecione um conceito de video acima para continuar</p>
+              )}
+
+              {/* Raw JSON */}
+              <div style={{ marginTop: 16 }}>
+                <button onClick={() => setShowBlueprintRaw(!showBlueprintRaw)} style={{ fontSize: 11, color: '#888', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>{showBlueprintRaw ? 'Fechar JSON raw' : 'Ver brand_blueprint completo'}</button>
+                {showBlueprintRaw && <pre style={{ margin: '8px 0 0', fontSize: 9, color: '#555', overflow: 'auto', maxHeight: 250, background: '#fafaf8', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap' }}>{JSON.stringify(blueprint, null, 2)}</pre>}
+              </div>
             </>
           )}
         </div>
@@ -446,23 +573,29 @@ COMPLETE HTML from <!DOCTYPE html> to </html>. No markdown backticks.` },
       {/* ═══ TAB: HTML ═══ */}
       {activeTab === 'html' && (
         <div>
-          {!generatedHtml && !loading && blueprint && (
+          {!generatedHtml && !loading && blueprint && selectedConcept && (
             <div style={{ textAlign: 'center', padding: 40 }}>
-              <p style={{ fontSize: 14, color: '#888', marginBottom: 16 }}>Blueprint pronto. Gere o site HTML premium.</p>
-              <Btn onClick={startHtmlGen}>Gerar Site HTML</Btn>
+              <p style={{ fontSize: 14, color: '#888', marginBottom: 8 }}>Blueprint pronto. Conceito {selectedConcept.id} selecionado.</p>
+              <p style={{ fontSize: 12, color: '#aaa', marginBottom: 16 }}>"{selectedConcept.name}" — {selectedConcept.scene}</p>
+              <Btn onClick={startHtmlGen}>Gerar Site HTML Premium</Btn>
+            </div>
+          )}
+          {!generatedHtml && !loading && (!blueprint || !selectedConcept) && (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <p style={{ fontSize: 14, color: '#ccc' }}>Complete as fases anteriores primeiro</p>
             </div>
           )}
           {loading && activeTab === 'html' && (
-            <Card><p style={{ fontSize: 13, color: '#1a5276' }}>Gerando site com Gemini Flash (pode levar 15-30s)...</p></Card>
+            <Card><p style={{ fontSize: 13, color: '#1a5276' }}>Gerando site com Gemini Flash — pode levar 15-30s...</p></Card>
           )}
           {previewUrl && generatedHtml && (
             <>
               <Card style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <SLabel style={{ margin: 0 }}>Preview do site</SLabel>
+                  <SLabel style={{ margin: 0 }}>Preview</SLabel>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <Btn sm onClick={() => { const w = window.open('', '_blank'); w.document.write(generatedHtml.html); w.document.close(); }}>Abrir em nova aba</Btn>
-                    <Btn sm variant="ghost" onClick={() => downloadHTML(generatedHtml.html, `${safeHostname(url)}-rebirth.html`)}>Download HTML</Btn>
+                    <Btn sm variant="ghost" onClick={() => downloadHTML(generatedHtml.html, `${safeHostname(url)}-rebirth.html`)}>Download</Btn>
                   </div>
                 </div>
                 <div style={{ border: '1px solid #eceae5', borderRadius: 8, overflow: 'hidden' }}>
@@ -474,7 +607,7 @@ COMPLETE HTML from <!DOCTYPE html> to </html>. No markdown backticks.` },
                   <SLabel style={{ margin: 0 }}>Codigo ({generatedHtml.code.length} chars)</SLabel>
                   <Btn sm onClick={() => { navigator.clipboard.writeText(generatedHtml.html); toast('HTML copiado'); }}>Copiar</Btn>
                 </div>
-                <pre style={{ margin: 0, fontSize: 10, color: '#555', overflow: 'auto', maxHeight: 250, background: '#fafaf8', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{generatedHtml.code.slice(0, 2000)}{generatedHtml.code.length > 2000 ? '\n...' : ''}</pre>
+                <pre style={{ margin: 0, fontSize: 9, color: '#555', overflow: 'auto', maxHeight: 200, background: '#fafaf8', padding: 10, borderRadius: 6, whiteSpace: 'pre-wrap' }}>{generatedHtml.code.slice(0, 2000)}{generatedHtml.code.length > 2000 ? '\n...' : ''}</pre>
               </Card>
             </>
           )}
