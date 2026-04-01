@@ -66,9 +66,18 @@ if (!document.querySelector('[data-reveal].visible')) {
 <\/script>`;
 
 export function buildPreviewHTML(rawCode, title) {
+  // If already complete HTML from pipeline, use as-is (don't clean)
+  if (rawCode && (rawCode.trimStart().startsWith('<!DOCTYPE') || rawCode.trimStart().startsWith('<html'))) {
+    let html = rawCode;
+    // Safety: inject IntersectionObserver if missing
+    if (!html.includes('IntersectionObserver') && html.includes('data-reveal')) {
+      html = html.replace('</body>', FALLBACK_MODULES + '\n</body>');
+    }
+    return html;
+  }
+  // Fallback: clean and wrap partial code
   const code = cleanCode(rawCode);
   let html = wrapHTML(code, title);
-  // Inject fallback modules before </body> if not already present
   if (!html.includes('IntersectionObserver') && html.includes('data-reveal')) {
     html = html.replace('</body>', FALLBACK_MODULES + '\n</body>');
   }
