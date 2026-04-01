@@ -76,7 +76,7 @@ export default function W4Brand({ w4, setW4 }) {
       try {
         const jsonMatch = raw.match(/\{[\s\S]*\}/);
         if (jsonMatch) brandBook = JSON.parse(jsonMatch[0]);
-      } catch { brandBook = { raw }; }
+      } catch { brandBook = { raw, parseError: true }; }
 
       // Step 3: Image prompts
       setStep('generating');

@@ -85,7 +85,10 @@ export default function W4Rebirth({ w4, setW4 }) {
       try {
         const jsonMatch = analysisContent.match(/\{[\s\S]*\}/);
         if (jsonMatch) blueprint = JSON.parse(jsonMatch[0]);
-      } catch { blueprint = { raw: analysisContent }; }
+        if (!blueprint.sector && !blueprint.sections) throw new Error('Invalid blueprint structure');
+      } catch {
+        blueprint = { raw: analysisContent, sector: 'Unknown', sections: [], weaknesses: [], tagline: '', parseError: true };
+      }
 
       setW4(d => ({
         ...d,

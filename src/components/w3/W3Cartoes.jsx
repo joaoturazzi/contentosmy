@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Card, Btn, SLabel, PBar, Empty, Modal, FormRow, Inp, Sel, toast } from '../ui';
-import { uid, fmtBRL, curMonth, curYear } from '@/lib/utils';
+import { uid, fmtBRL, fmtDateBR, curMonth, curYear } from '@/lib/utils';
 import { FIN_BILL_ST, MONTHS } from '@/lib/constants';
 
 export default function W3Cartoes({ w3, setW3 }) {
@@ -114,7 +114,7 @@ export default function W3Cartoes({ w3, setW3 }) {
                 {card.dueDay && (
                   <div style={{ textAlign: 'right' }}>
                     <p style={{ margin: 0, fontSize: 11, color: '#888' }}>Fecha dia {card.closingDay} · Vence dia {card.dueDay}</p>
-                    {bill?.dueDate && <p style={{ margin: 0, fontSize: 11, color: '#d68910' }}>Venc: {bill.dueDate.split('-').reverse().join('/')}</p>}
+                    {bill?.dueDate && <p style={{ margin: 0, fontSize: 11, color: '#d68910' }}>Venc: {fmtDateBR(bill.dueDate)}</p>}
                   </div>
                 )}
               </div>

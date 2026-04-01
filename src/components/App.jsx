@@ -146,7 +146,7 @@ export default function App(){
             <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,letterSpacing:"0.09em",color:"#ccc",textTransform:"uppercase",paddingLeft:8}}>Quick add</p>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
               {(ws==="content"?[["task","Task"],["idea","Ideia"],["note","Nota"],["goal","Meta"]]:ws==="opb"?[["task","Task"],["project","Projeto"],["goal","Meta"],["content","Conteúdo"]]:ws==="finance"?[["gasto","Gasto"],["fixo","Custo Fixo"]]:[["rebirth","Site"],["brand","Brand"],["ads","Ad"],["components","UI"]]).map(([t,l])=>(
-                <button key={t} onClick={()=>{setWsOpen(false);ws==="visual"?setW4Page(t):openQuick(t);}} style={{fontSize:11,padding:"5px 8px",borderRadius:5,cursor:"pointer",background:"transparent",border:"1px solid #e5e4e0",color:"#888",fontFamily:"inherit",fontWeight:500,textAlign:"center",transition:"background .08s"}}>+ {l}</button>
+                <button key={t} onClick={()=>{setWsOpen(false);ws==="visual"?setW4Page(t):ws==="finance"?setW3Page(t==="gasto"?"gastos":"fixos"):openQuick(t);}} style={{fontSize:11,padding:"5px 8px",borderRadius:5,cursor:"pointer",background:"transparent",border:"1px solid #e5e4e0",color:"#888",fontFamily:"inherit",fontWeight:500,textAlign:"center",transition:"background .08s"}}>+ {l}</button>
               ))}
             </div>
           </div>

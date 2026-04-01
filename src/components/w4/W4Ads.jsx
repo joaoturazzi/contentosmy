@@ -58,7 +58,8 @@ export default function W4Ads({ w4, setW4 }) {
       try {
         const match = raw.match(/\{[\s\S]*\}/);
         if (match) concepts = JSON.parse(match[0]);
-      } catch { concepts = { raw }; }
+        if (!concepts.concepts) concepts = { concepts: [], raw };
+      } catch { concepts = { concepts: [], raw, parseError: true }; }
 
       const output = {
         id: uid(), projectId, type: 'ad_copy',

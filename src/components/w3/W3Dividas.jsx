@@ -40,8 +40,9 @@ export default function W3Dividas({ w3, setW3 }) {
         <SLabel>Detalhamento</SLabel>
         {debts.length === 0 && <Empty text="Nenhuma dívida ativa" />}
         {debts.map(debt => {
-          const paidPct = debt.remainingAmount && debt.remainingInstallments && debt.monthlyPayment
-            ? Math.round(((debt.remainingAmount - (debt.remainingInstallments * debt.monthlyPayment)) / debt.remainingAmount + 1) * 100)
+          const totalOwed = (debt.remainingInstallments || 0) * (debt.monthlyPayment || 0);
+          const paidPct = debt.remainingAmount && totalOwed > 0
+            ? Math.round(Math.max(0, (1 - totalOwed / debt.remainingAmount)) * 100)
             : 0;
           const estimatedEnd = debt.remainingInstallments
             ? (() => {
