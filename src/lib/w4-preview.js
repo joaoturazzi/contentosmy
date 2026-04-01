@@ -47,9 +47,32 @@ ${code}
 </html>`;
 }
 
+// Guaranteed scroll reveal + grain script (injected if missing from generated code)
+const FALLBACK_MODULES = `
+<script>
+// Scroll reveal (fallback if not in generated code)
+if (!document.querySelector('[data-reveal].visible')) {
+  document.querySelectorAll('[data-reveal]').forEach(function(el) {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(28px)';
+    el.style.transition = 'opacity 0.9s cubic-bezier(0.16,1,0.3,1), transform 0.9s cubic-bezier(0.16,1,0.3,1)';
+    el.style.transitionDelay = 'calc(' + (el.style.getPropertyValue('--stagger') || '0') + ' * 120ms)';
+  });
+  var ro = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) { if (e.isIntersecting) { e.target.style.opacity='1'; e.target.style.transform='translateY(0)'; ro.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -50px 0px' });
+  document.querySelectorAll('[data-reveal]').forEach(function(el) { ro.observe(el); });
+}
+<\/script>`;
+
 export function buildPreviewHTML(rawCode, title) {
   const code = cleanCode(rawCode);
-  return wrapHTML(code, title);
+  let html = wrapHTML(code, title);
+  // Inject fallback modules before </body> if not already present
+  if (!html.includes('IntersectionObserver') && html.includes('data-reveal')) {
+    html = html.replace('</body>', FALLBACK_MODULES + '\n</body>');
+  }
+  return html;
 }
 
 export function isCodeComplete(code) {

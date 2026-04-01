@@ -60,10 +60,15 @@ export function parseScrapedData(scrapeData, mapData, inputUrl) {
     !e.includes('example') && !e.includes('test') && !e.includes('sentry')
   ).slice(0, 5);
 
-  // 6. Headings
-  const h1s = [...markdown.matchAll(/^# (.+)$/gm)].map(m => m[1].trim()).slice(0, 5);
-  const h2s = [...markdown.matchAll(/^## (.+)$/gm)].map(m => m[1].trim()).slice(0, 10);
-  const h3s = [...markdown.matchAll(/^### (.+)$/gm)].map(m => m[1].trim()).slice(0, 15);
+  // 6. Headings (flexible: with or without space after #)
+  const h1s = [...markdown.matchAll(/^#{1}\s+(.+)$/gm), ...markdown.matchAll(/\n#{1}\s+(.+)/g)].map(m => m[1].trim()).filter((v, i, a) => a.indexOf(v) === i).slice(0, 5);
+  const h2s = [...markdown.matchAll(/^#{2}\s+(.+)$/gm), ...markdown.matchAll(/\n#{2}\s+(.+)/g)].map(m => m[1].trim()).filter((v, i, a) => a.indexOf(v) === i).slice(0, 10);
+  const h3s = [...markdown.matchAll(/^#{3}\s+(.+)$/gm), ...markdown.matchAll(/\n#{3}\s+(.+)/g)].map(m => m[1].trim()).filter((v, i, a) => a.indexOf(v) === i).slice(0, 15);
+  // Fallback: if no h1 found, use bold text as pseudo-headings
+  if (h1s.length === 0) {
+    const bold = [...markdown.matchAll(/\*\*([^*]{5,60})\*\*/g)].map(m => m[1].trim());
+    h1s.push(...bold.slice(0, 3));
+  }
 
   // 7. Subpages
   const subpages = (mapData?.links || mapData?.data?.links || []).slice(0, 20);
