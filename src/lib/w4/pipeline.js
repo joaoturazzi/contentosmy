@@ -132,6 +132,47 @@ function buildHTMLShell(blueprint, plan, scraped, vibe) {
 }
 
 // ════════════════════════════════════════════════════════
+// HELPERS: Footer + Sanitization (code-guaranteed, not model)
+// ════════════════════════════════════════════════════════
+function buildFooterHTML(blueprint) {
+  const contact = blueprint.copy?.sections?.find(s => s.id === 'contact') || {};
+  const name = blueprint.business?.name || 'Brand';
+  const year = new Date().getFullYear();
+  const logoHTML = blueprint.brand?.logo_url && blueprint.brand.logo_url !== 'null'
+    ? '<img src="' + blueprint.brand.logo_url + '" alt="' + name + '" style="max-height:28px;width:auto;margin-bottom:.75rem;display:block">'
+    : '<span style="font-family:var(--font-display);font-weight:800;font-size:16px;letter-spacing:-0.03em;color:var(--text);display:block;margin-bottom:.75rem">' + name + '</span>';
+  const items = [
+    contact.phone && '<li><a href="tel:' + contact.phone + '">' + contact.phone + '</a></li>',
+    contact.email && '<li><a href="mailto:' + contact.email + '">' + contact.email + '</a></li>',
+    contact.address && '<li style="color:var(--text-60);font-size:13px">' + contact.address + '</li>',
+    contact.hours && '<li style="color:var(--text-60);font-size:13px">' + contact.hours + '</li>',
+  ].filter(Boolean).join('\n          ');
+
+  return '\n<footer id="contato">\n  <div class="container">\n    <div class="footer-grid">\n      <div class="footer-brand">\n        ' + logoHTML + '\n        <p style="font-size:13px;color:var(--text-40);line-height:1.6;max-width:28ch">' + (blueprint.business?.main_product || blueprint.business?.sector || '') + '</p>\n      </div>\n      <div class="footer-col">\n        <h4>Produto</h4>\n        <ul>\n          <li><a href="#features">Funcionalidades</a></li>\n          <li><a href="#about">Sobre</a></li>\n        </ul>\n      </div>\n      <div class="footer-col">\n        <h4>Empresa</h4>\n        <ul>\n          <li><a href="#">Blog</a></li>\n          <li><a href="#">Carreiras</a></li>\n        </ul>\n      </div>\n      <div class="footer-col">\n        <h4>Contato</h4>\n        <ul>\n          ' + (items || '<li><a href="#cta">Fale conosco</a></li>') + '\n        </ul>\n      </div>\n    </div>\n    <div class="footer-bottom">\n      <p>&copy; ' + year + ' ' + name + '. Todos os direitos reservados.</p>\n      <nav class="footer-legal">\n        <a href="#">Privacidade</a>\n        <a href="#">Termos de uso</a>\n      </nav>\n    </div>\n  </div>\n</footer>';
+}
+
+function sanitizeSections(raw) {
+  if (!raw) return '';
+  let s = raw
+    .replace(/<!DOCTYPE[^>]*>/gi, '').replace(/<\/?html[^>]*>/gi, '')
+    .replace(/<head[\s\S]*?<\/head>/gi, '').replace(/<\/?body[^>]*>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/^```(?:html)?\n?/gm, '').replace(/\n?```$/gm, '')
+    .trim();
+  // Detect truncation: more < than >
+  const opens = (s.match(/</g) || []).length;
+  const closes = (s.match(/>/g) || []).length;
+  if (opens > closes) {
+    const lastComplete = s.lastIndexOf('>');
+    if (lastComplete > s.length - 200) {
+      s = s.slice(0, lastComplete + 1);
+      console.warn('[runBuild] Truncated content detected, cut at position ' + lastComplete);
+    }
+  }
+  return s;
+}
+
+// ════════════════════════════════════════════════════════
 // CHAMADA 3 — BUILD (model generates ONLY section innerHTML)
 // ════════════════════════════════════════════════════════
 export async function runBuild(plan, blueprint, scraped, vibe, key, onProgress) {
@@ -231,20 +272,18 @@ PROIBIDO: picsum.photos, lorempixel, placeholder.com, URLs inventadas.
 SECOES (gerar nesta ordem, cada uma com data-reveal):
 ${(plan.sections || []).map((s, i) => `${i + 1}. ${s.id}: ${s.name} (${s.layout || 'auto'})`).join('\n')}
 
-Gerar fragmentos HTML de TODAS as secoes agora. Comecar com hero, terminar com footer.`;
+Gerar fragmentos HTML das secoes agora. Comecar com hero. NAO gerar footer — o footer ja esta pronto no codigo.`;
 
   onProgress?.('Gerando conteudo das secoes...');
   const raw = await callOR(key, MODELS.build, sysPrompt, userPrompt, 7000, TIMEOUTS.build);
 
-  // Strip any wrapper tags the model might have added
-  let sections = raw
-    .replace(/<!DOCTYPE[^>]*>/gi, '').replace(/<\/?html[^>]*>/gi, '')
-    .replace(/<head[\s\S]*?<\/head>/gi, '').replace(/<\/?body[^>]*>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/^```(?:html)?\n?/gm, '').replace(/\n?```$/gm, '')
-    .trim();
+  // Sanitize: strip wrappers, detect truncation
+  const sections = sanitizeSections(raw);
 
-  // Assemble final HTML: CODE shell + MODEL sections
+  // Footer guaranteed by code (not model)
+  const footerHTML = buildFooterHTML(blueprint);
+
+  // Assemble final HTML: CODE shell + MODEL sections + CODE footer + CODE scripts
   const finalHTML = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -252,6 +291,9 @@ Gerar fragmentos HTML de TODAS as secoes agora. Comecar com hero, terminar com f
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${blueprint.business.name} — ${blueprint.copy.hero_headline}</title>
   <meta name="description" content="${blueprint.copy.hero_sub}">
+  <meta property="og:title" content="${blueprint.business.name}">
+  <meta property="og:description" content="${blueprint.copy.hero_sub}">
+  ${blueprint.brand.logo_url ? '<meta property="og:image" content="' + blueprint.brand.logo_url + '">' : ''}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="${shell.googleFonts}" rel="stylesheet">
@@ -269,6 +311,7 @@ ${shell.navHTML}
 <main>
 ${sections}
 </main>
+${footerHTML}
 <script>
 ${shell.moduleScripts}
 </script>
