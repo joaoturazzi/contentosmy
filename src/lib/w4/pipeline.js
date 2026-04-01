@@ -157,13 +157,45 @@ CLASSES CSS DISPONIVEIS (ja definidas):
 footer .footer-grid .footer-col .footer-bottom .footer-legal
 
 REGRAS:
-- Hero layout SPLIT SCREEN: texto esquerda, visual direita. NUNCA centralizar.
-- Features: classes .bento .bento-card .wide .tall — NUNCA 3 cards iguais
-- Botoes: classe .btn-primary com .btn-icon para seta
+- Hero layout SPLIT SCREEN: texto esquerda (60%), visual direita (40%). NUNCA centralizar.
+- Botoes: classe .btn-primary com .btn-icon para seta ↗
 - TODAS as secoes e elementos devem ter data-reveal e style="--stagger:N"
 - NUNCA inventar URLs de imagem. Usar APENAS as fornecidas ou SVGs inline.
 - NUNCA incluir <style> ou <script> tags
-- Zero TODO, zero placeholder`;
+- Zero TODO, zero placeholder
+
+ESTRUTURA OBRIGATORIA DA SECAO FEATURES — COPIAR E PREENCHER:
+<section id="features" class="section">
+  <div class="container">
+    <div data-reveal style="--stagger:0">
+      <div class="section-label">Diferenciais</div>
+      <h2 class="section-title">[TITULO REAL]</h2>
+    </div>
+    <div class="bento" style="margin-top:3.5rem">
+      <div class="bento-card" data-reveal style="--stagger:1">
+        <div class="bento-icon" style="color:var(--accent)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2z" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:.5rem">[FEATURE 1]</h3>
+        <p style="color:var(--text);opacity:0.6;font-size:14px;line-height:1.6">[DESC 1]</p>
+      </div>
+      <div class="bento-card tall" data-reveal style="--stagger:2">
+        <div class="bento-icon" style="color:var(--accent)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 14l4-4 3 3 3-5 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:.5rem">[FEATURE 2]</h3>
+        <p style="color:var(--text);opacity:0.6;font-size:14px;line-height:1.6">[DESC 2]</p>
+      </div>
+      <div class="bento-card wide" data-reveal style="--stagger:3">
+        <div class="bento-icon" style="color:var(--accent)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 8h8M6 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:.5rem">[FEATURE 3]</h3>
+        <p style="color:var(--text);opacity:0.6;font-size:14px;line-height:1.6">[DESC 3]</p>
+      </div>
+      <div class="bento-card" data-reveal style="--stagger:4">
+        <div class="bento-icon" style="color:var(--accent)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:.5rem">[FEATURE 4]</h3>
+        <p style="color:var(--text);opacity:0.6;font-size:14px;line-height:1.6">[DESC 4]</p>
+      </div>
+    </div>
+  </div>
+</section>
+Substituir [FEATURE N] e [DESC N] com dados reais do blueprint. NUNCA usar 3 colunas iguais.`;
 
   const feats = blueprint.copy?.sections?.find(s => s.id === 'features')?.items || [];
   const about = blueprint.copy?.sections?.find(s => s.id === 'about') || {};
@@ -177,9 +209,24 @@ Features: ${feats.map((f, i) => `${i + 1}.${f.title}: ${f.desc}`).join(' | ')}
 Sobre: ${about.content || ''}
 Contato: Tel=${contact.phone || 'N/A'} Email=${contact.email || 'N/A'} End=${contact.address || 'N/A'}
 
-IMAGENS REAIS (usar APENAS estas):
-${shell.heroImage ? 'Hero: ' + shell.heroImage : 'Hero: usar div com gradiente CSS'}
-${shell.realImages.map((img, i) => `Img${i + 1}: ${img}`).join('\n')}
+HERO VISUAL (lado direito do split screen):
+${shell.heroImage
+    ? `Usar esta imagem real no hero:
+<div class="hero-visual" data-reveal style="--stagger:3">
+  <div class="bezel-outer"><div class="bezel-inner" style="padding:0;overflow:hidden">
+    <img src="${shell.heroImage}" alt="${blueprint.business.name}" style="width:100%;max-height:480px;object-fit:cover;display:block;border-radius:inherit">
+  </div></div>
+</div>`
+    : `Sem imagem — usar visual decorativo:
+<div class="hero-visual" data-reveal style="--stagger:3">
+  <div class="bezel-outer"><div class="bezel-inner" style="min-height:400px;background:linear-gradient(135deg,var(--primary),transparent);display:flex;align-items:center;justify-content:center">
+    <span style="font-family:var(--font-display);font-size:4rem;font-weight:900;opacity:0.1;letter-spacing:-.05em">${(blueprint.business.name || 'X').slice(0, 3).toUpperCase()}</span>
+  </div></div>
+</div>`}
+
+OUTRAS IMAGENS REAIS (usar nas secoes):
+${shell.realImages.slice(0, 4).map((img, i) => `Img${i + 1}: ${img}`).join('\n')}
+PROIBIDO: picsum.photos, lorempixel, placeholder.com, URLs inventadas.
 
 SECOES (gerar nesta ordem, cada uma com data-reveal):
 ${(plan.sections || []).map((s, i) => `${i + 1}. ${s.id}: ${s.name} (${s.layout || 'auto'})`).join('\n')}
