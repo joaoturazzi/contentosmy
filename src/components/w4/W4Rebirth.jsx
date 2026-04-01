@@ -3,10 +3,10 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, Inp, Sel, Btn, SLabel, Modal, toast } from '../ui';
 import { uid } from '@/lib/utils';
 import { W4_VIBES, W4_MODELS } from '@/lib/constants';
-import { buildSystemPrompt } from '@/lib/w4-system-prompt';
-import { callLLM, callScrape, ensureUrl, safeHostname, generateBrandCore, generateVideoConcepts, validateBlueprint, testConnections } from '@/lib/w4-api';
-import { buildPreviewHTML, downloadHTML, isCodeComplete } from '@/lib/w4-preview';
-import { parseScrapedData, fetchJina, fetchRawHTML } from '@/lib/w4-scrape-parser';
+import { ensureUrl, safeHostname, testConnections } from '@/lib/w4-api';
+import { buildPreviewHTML, downloadHTML } from '@/lib/w4-preview';
+import { runScrape } from '@/lib/w4/scraper';
+import { generateBrandBlueprint } from '@/lib/w4/brand-generator';
 import { runFullPipeline } from '@/lib/w4/pipeline';
 
 const VIBE_CFG = {
@@ -82,22 +82,13 @@ export default function W4Rebirth({ w4, setW4 }) {
     ]);
     try {
       upStep('scrape', 'loading'); upStep('map', 'loading');
-      // Multi-source: Firecrawl + Jina + raw HTML in parallel
-      const [fcResult, jinaResult, rawResult] = await Promise.allSettled([
-        callScrape({ url: fullUrl, apiKey: fcKey }),
-        fetchJina(fullUrl),
-        fetchRawHTML(fullUrl),
-      ]);
-      const fcData = fcResult.status === 'fulfilled' ? fcResult.value : null;
-      const jina = jinaResult.status === 'fulfilled' ? jinaResult.value : '';
-      const rawHTML = rawResult.status === 'fulfilled' ? rawResult.value : '';
-      if (!fcData) throw new Error('Firecrawl falhou: ' + (fcResult.reason?.message || 'erro'));
-      upStep('scrape', true); upStep('map', true); upStep('parse', 'loading');
-      const parsed = parseScrapedData(fcData.scrape, fcData.map, fullUrl, jina, rawHTML);
-      if (!parsed.markdown || parsed.markdown.length < 50) throw new Error('Conteudo insuficiente extraido.');
-      upStep('parse', true); upStep('done', true);
+      const parsed = await runScrape(fullUrl, fcKey, (msg) => {
+        if (msg.includes('OK') || msg.includes('conclu')) { upStep('scrape', true); upStep('map', true); upStep('parse', true); upStep('done', true); }
+        else if (msg.includes('Extraindo')) { upStep('scrape', true); upStep('map', true); upStep('parse', 'loading'); }
+      });
+      upStep('scrape', true); upStep('map', true); upStep('parse', true); upStep('done', true);
       setScraped(parsed);
-      toast(`Scraping OK: ${parsed.images.length} imgs, ${parsed.colors.length} cores, ${parsed.headings.h1.length} h1s`);
+      toast(`Scraping OK: ${parsed.images.length} imgs, ${parsed.colors.length} cores, logo: ${parsed._sources.logo_strategy}`);
     } catch (e) { setError(e.message); toast('Erro: ' + (e.message || '').slice(0, 80)); }
     setLoading(false);
   };
@@ -108,21 +99,15 @@ export default function W4Rebirth({ w4, setW4 }) {
     setLoading(true); setError(null); setBlueprint(null); setSelectedConcept(null); setActiveTab('brand');
     animate(['Analisando identidade da marca...', 'Extraindo paleta e tipografia...', 'Reescrevendo copy...', 'Gerando 3 conceitos de video...', 'Finalizando...']);
     try {
-      // Split: brand core + video concepts in parallel
-      const [core, concepts] = await Promise.all([
-        generateBrandCore(scraped, vibe, orKey, W4_MODELS.analysis),
-        generateVideoConcepts(scraped.businessName || scraped.metadata.title, '', '', scraped.colors[0] || '#333', orKey, W4_MODELS.analysis),
-      ]);
+      const bp = await generateBrandBlueprint(scraped, vibe, orKey, W4_MODELS.analysis, (msg) => setStepMsg(msg));
       stopAnim();
-      validateBlueprint(core);
-      const bp = { ...core, video_concepts: concepts.length === 3 ? concepts : [{ id: 'A', name: 'Conceito A', scene: 'Cena padrao', camera: 'Zoom lento', lighting: 'Dramatica', mood: 'Premium', image_prompt: 'product cinematic 8K', video_prompt: 'slow zoom' }, { id: 'B', name: 'Conceito B', scene: 'Cena alternativa', camera: 'Pan', lighting: 'Natural', mood: 'Clean', image_prompt: 'product natural light', video_prompt: 'slow pan' }, { id: 'C', name: 'Conceito C', scene: 'Cena close-up', camera: 'Close-up', lighting: 'Studio', mood: 'Detalhado', image_prompt: 'product close-up studio', video_prompt: 'slow tilt' }] };
+      if (!bp.business?.name) throw new Error('Blueprint incompleto: sem nome da empresa');
       setBlueprint(bp);
-      toast('Brand blueprint gerado');
+      toast(`Blueprint: ${bp.business.name} — font: ${bp.brand?.typography?.display}`);
     } catch (e) { stopAnim(); setError(e.message); toast('Erro: ' + (e.message || '').slice(0, 80)); }
     setLoading(false);
   };
 
-  // ═══ PHASE 3: HTML ═══
   // ═══ PHASE 3: HTML via 4-STEP PIPELINE ═══
   const startHtmlGen = async () => {
     if (!blueprint || !selectedConcept) return;
