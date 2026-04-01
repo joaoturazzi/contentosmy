@@ -39,6 +39,10 @@ const TABLE_CONFIG = {
   fin_debts:            { columns: ['id','name','creditor','original_amount','remaining_amount','monthly_payment','interest_rate','remaining_installments','next_due_date','payment_method','is_active','notes','created_at'], order: 'remaining_amount DESC' },
   fin_goals:            { columns: ['id','name','target_amount','current_amount','target_date','category','color','is_achieved','notes','created_at'], order: 'created_at DESC' },
   fin_alerts:           { columns: ['id','type','title','message','due_date','amount','is_read','is_dismissed','created_at'], order: 'created_at DESC' },
+  // W4: Cinematic Agency Engine
+  w4_projects:  { columns: ['id','name','type','status','input_url','input_text','input_channel','vibe','brand_blueprint','scraped_data','output_content','error_message','notes','created_at'], order: 'created_at DESC', jsonb: ['brand_blueprint','scraped_data','output_content'] },
+  w4_outputs:   { columns: ['id','project_id','type','title','content','language','metadata','created_at'], order: 'created_at DESC', jsonb: ['metadata'] },
+  w4_settings:  { columns: ['id','key','value','created_at'], order: 'key ASC' },
 };
 
 // ── Resolve table name ───────────────────────────────────────────
@@ -143,3 +147,4 @@ export function createEntityHandler(workspace, entity) {
 export const VALID_W1_ENTITIES = ['tasks', 'ideas', 'notes', 'events', 'goals', 'guests'];
 export const VALID_W2_ENTITIES = ['projects', 'tasks', 'goals', 'content', 'tools', 'clients', 'notes', 'personal'];
 export const VALID_FIN_ENTITIES = ['categories', 'income_sources', 'fixed_costs', 'fixed_payments', 'transactions', 'emergency_reserve', 'monthly_budgets', 'credit_cards', 'card_bills', 'installments', 'debts', 'goals', 'alerts'];
+export const VALID_W4_ENTITIES = ['projects', 'outputs', 'settings'];

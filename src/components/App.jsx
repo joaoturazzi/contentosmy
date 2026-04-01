@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useDatabaseSync } from '@/lib/sync';
-import { CH, AREA_C, AREAS, W1_NAV, W2_NAV, W3_NAV, WS, FIN_FUNDED } from '@/lib/constants';
+import { CH, AREA_C, AREAS, W1_NAV, W2_NAV, W3_NAV, W4_NAV, WS, FIN_FUNDED, W4_FUNC } from '@/lib/constants';
 import { today } from '@/lib/utils';
 
 import { UserButton } from '@clerk/nextjs';
@@ -40,9 +40,18 @@ import W3Dividas from './w3/W3Dividas';
 import W3Calendario from './w3/W3Calendario';
 import W3Importar from './w3/W3Importar';
 
+import W4Home from './w4/W4Home';
+import W4Rebirth from './w4/W4Rebirth';
+import W4Brand from './w4/W4Brand';
+import W4Ads from './w4/W4Ads';
+import W4Components from './w4/W4Components';
+import W4Projects from './w4/W4Projects';
+import W4Config from './w4/W4Config';
+
 const W1_ENTITIES = ['tasks', 'ideas', 'notes', 'events', 'goals', 'guests'];
 const W2_ENTITIES = ['projects', 'tasks', 'goals', 'content', 'tools', 'clients', 'notes', 'personal'];
 const W3_ENTITIES = ['categories', 'income_sources', 'fixed_costs', 'fixed_payments', 'transactions', 'emergency_reserve', 'monthly_budgets', 'credit_cards', 'card_bills', 'installments', 'debts', 'goals', 'alerts'];
+const W4_ENTITIES = ['projects', 'outputs', 'settings'];
 
 export default function App(){
   const [ws,setWs]=useState("content");
@@ -50,6 +59,7 @@ export default function App(){
   const [w1Page,setW1Page]=useState("home");
   const [w2Page,setW2PageRaw]=useState("home");
   const [w3Page,setW3Page]=useState("home");
+  const [w4Page,setW4Page]=useState("home");
   const [openProject,setOpenProject]=useState(null);
 
   // Command palette & quick capture
@@ -61,6 +71,7 @@ export default function App(){
   const [w1, setW1, w1Loaded] = useDatabaseSync('w1', W1_ENTITIES, {tasks:[],ideas:[],notes:[],events:[],goals:[],guests:[]});
   const [w2, setW2, w2Loaded] = useDatabaseSync('w2', W2_ENTITIES, {projects:[],tasks:[],goals:[],content:[],tools:[],clients:[],notes:[],personal:[]});
   const [w3, setW3, w3Loaded] = useDatabaseSync('w3', W3_ENTITIES, {categories:[],income_sources:[],fixed_costs:[],fixed_payments:[],transactions:[],emergency_reserve:[],monthly_budgets:[],credit_cards:[],card_bills:[],installments:[],debts:[],goals:[],alerts:[]});
+  const [w4, setW4, w4Loaded] = useDatabaseSync('w4', W4_ENTITIES, {projects:[],outputs:[],settings:[]});
 
   const setW2Page=useCallback(p=>{if(p.startsWith("projects_")){setW2PageRaw("projects");setOpenProject(p.replace("projects_",""));}else{setW2PageRaw(p);setOpenProject(null);}},[]);
 
@@ -74,8 +85,8 @@ export default function App(){
   },[]);
 
   const openQuick=(type)=>{setQuickType(type);setQuickOpen(true);};
-  const page=ws==="content"?w1Page:ws==="opb"?w2Page:w3Page;
-  const nav=ws==="content"?W1_NAV:ws==="opb"?W2_NAV:W3_NAV;
+  const page=ws==="content"?w1Page:ws==="opb"?w2Page:ws==="finance"?w3Page:w4Page;
+  const nav=ws==="content"?W1_NAV:ws==="opb"?W2_NAV:ws==="finance"?W3_NAV:W4_NAV;
   const pending=ws==="content"?w1.tasks.filter(t=>!t.done).length:ws==="opb"?w2.tasks.filter(t=>!t.done).length:0;
   const overdue=ws==="content"?w1.tasks.filter(t=>!t.done&&t.dueDate&&t.dueDate<today()).length:ws==="opb"?w2.tasks.filter(t=>!t.done&&t.dueDate&&t.dueDate<today()).length:0;
   const curWs=WS.find(w=>w.id===ws);
@@ -121,7 +132,7 @@ export default function App(){
           {/* Nav */}
           <nav style={{flex:1}}>
             {nav.map(item=>(
-              <button key={item.id} className="nav-btn" onClick={()=>{setWsOpen(false);ws==="content"?setW1Page(item.id):ws==="opb"?(item.id==="projects"?setOpenProject(null):null,setW2Page(item.id)):setW3Page(item.id);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"6px 8px",borderRadius:6,cursor:"pointer",border:"none",textAlign:"left",background:page===item.id?"#ebe9e4":"transparent",color:page===item.id?"#1a1a1a":"#555",fontSize:13,fontWeight:page===item.id?700:400,fontFamily:"inherit",marginBottom:1,transition:"background .08s"}}>
+              <button key={item.id} className="nav-btn" onClick={()=>{setWsOpen(false);ws==="content"?setW1Page(item.id):ws==="opb"?(item.id==="projects"?setOpenProject(null):null,setW2Page(item.id)):ws==="finance"?setW3Page(item.id):setW4Page(item.id);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"6px 8px",borderRadius:6,cursor:"pointer",border:"none",textAlign:"left",background:page===item.id?"#ebe9e4":"transparent",color:page===item.id?"#1a1a1a":"#555",fontSize:13,fontWeight:page===item.id?700:400,fontFamily:"inherit",marginBottom:1,transition:"background .08s"}}>
                 <span style={{fontSize:11,opacity:0.55}}>{item.icon}</span>
                 {item.label}
                 {item.id==="tasks"&&overdue>0&&<span style={{marginLeft:"auto",fontSize:10,background:"#fdf2f2",color:"#c0392b",padding:"1px 5px",borderRadius:10,fontWeight:700}}>{overdue}</span>}
@@ -134,7 +145,7 @@ export default function App(){
           <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid #eceae5"}}>
             <p style={{margin:"0 0 8px",fontSize:10,fontWeight:700,letterSpacing:"0.09em",color:"#ccc",textTransform:"uppercase",paddingLeft:8}}>Quick add</p>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-              {(ws==="content"?[["task","Task"],["idea","Ideia"],["note","Nota"],["goal","Meta"]]:ws==="opb"?[["task","Task"],["project","Projeto"],["goal","Meta"],["content","Conteúdo"]]:[["gasto","Gasto"],["fixo","Custo Fixo"]]).map(([t,l])=>(
+              {(ws==="content"?[["task","Task"],["idea","Ideia"],["note","Nota"],["goal","Meta"]]:ws==="opb"?[["task","Task"],["project","Projeto"],["goal","Meta"],["content","Conteúdo"]]:ws==="finance"?[["gasto","Gasto"],["fixo","Custo Fixo"]]:[["rebirth","Site"],["brand","Brand"],["ads","Ad"],["components","UI"]]).map(([t,l])=>(
                 <button key={t} onClick={()=>{setWsOpen(false);openQuick(t);}} style={{fontSize:11,padding:"5px 8px",borderRadius:5,cursor:"pointer",background:"transparent",border:"1px solid #e5e4e0",color:"#888",fontFamily:"inherit",fontWeight:500,textAlign:"center",transition:"background .08s"}}>+ {l}</button>
               ))}
             </div>
@@ -142,12 +153,14 @@ export default function App(){
 
           {/* Areas / Channels */}
           <div style={{paddingTop:14,marginTop:8,borderTop:"1px solid #eceae5"}}>
-            <p style={{margin:"0 0 6px",fontSize:10,fontWeight:700,letterSpacing:"0.09em",color:"#ccc",textTransform:"uppercase",paddingLeft:8}}>{ws==="content"?"Canais":ws==="opb"?"Áreas":"Fontes"}</p>
+            <p style={{margin:"0 0 6px",fontSize:10,fontWeight:700,letterSpacing:"0.09em",color:"#ccc",textTransform:"uppercase",paddingLeft:8}}>{ws==="content"?"Canais":ws==="opb"?"Áreas":ws==="finance"?"Fontes":"Functions"}</p>
             {ws==="content"
               ?Object.entries(CH).slice(0,3).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:v.color,flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{v.label}</span></div>)
               :ws==="opb"
               ?AREAS.map(a=><div key={a} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:AREA_C[a].color,flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{a}</span></div>)
-              :Object.entries(FIN_FUNDED).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:k==="renda_principal"?"#0F9B58":k==="entrada_mazul"?"#2196F3":"#00BCD4",flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{v}</span></div>)
+              :ws==="finance"
+              ?Object.entries(FIN_FUNDED).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:k==="renda_principal"?"#0F9B58":k==="entrada_mazul"?"#2196F3":"#00BCD4",flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{v}</span></div>)
+              :Object.entries(W4_FUNC).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",gap:7,padding:"2px 8px"}}><span style={{width:6,height:6,borderRadius:2,background:"#555",flexShrink:0}}/><span style={{fontSize:11,color:"#888"}}>{v.label}</span></div>)
             }
           </div>
 
@@ -207,6 +220,20 @@ export default function App(){
             </>
           )}
           {ws==="finance"&&!w3Loaded&&<p style={{color:"#bbb",fontSize:13}}>Carregando…</p>}
+
+          {/* W4 Visual OS */}
+          {ws==="visual"&&w4Loaded&&(
+            <>
+              {w4Page==="home"&&<W4Home w4={w4} setW4={setW4} setPage={setW4Page}/>}
+              {w4Page==="rebirth"&&<W4Rebirth w4={w4} setW4={setW4}/>}
+              {w4Page==="brand"&&<W4Brand w4={w4} setW4={setW4}/>}
+              {w4Page==="ads"&&<W4Ads w4={w4} setW4={setW4}/>}
+              {w4Page==="components"&&<W4Components w4={w4} setW4={setW4}/>}
+              {w4Page==="projects"&&<W4Projects w4={w4} setW4={setW4} setPage={setW4Page}/>}
+              {w4Page==="config"&&<W4Config w4={w4} setW4={setW4}/>}
+            </>
+          )}
+          {ws==="visual"&&!w4Loaded&&<p style={{color:"#bbb",fontSize:13}}>Carregando…</p>}
         </div>
       </div>
 

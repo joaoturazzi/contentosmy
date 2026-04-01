@@ -21,7 +21,7 @@ async function migrate() {
   }
 
   const sql = neon(process.env.DATABASE_URL);
-  const schemaFiles = ['schema.sql', 'schema-w3.sql'];
+  const schemaFiles = ['schema.sql', 'schema-w3.sql', 'schema-w4.sql'];
   const schema = schemaFiles
     .map(f => { try { return fs.readFileSync(path.join(__dirname, f), 'utf-8'); } catch { return ''; } })
     .join('\n');
