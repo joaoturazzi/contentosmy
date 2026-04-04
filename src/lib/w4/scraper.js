@@ -60,37 +60,96 @@ function parseAllSources(fcData, jinaMarkdown, rawHTML, originalUrl) {
     try { return new URL(src, baseUrl).href; } catch { return null; }
   }
 
-  // ═══ LOGO (6 strategies) ═══
+  // ═══ LOGO (8 strategies, smart filtering) ═══
   const ogImage = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i)?.[1] || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)?.[1];
   const appleIcon = html.match(/<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)/i)?.[1];
   const faviconSvg = html.match(/<link[^>]+rel=["'][^"']*icon[^"']*["'][^>]+href=["']([^"']*\.(?:svg|png)(?:\?[^"']*)?)/i)?.[1];
-  const logoInSrc = html.match(/<img[^>]+src=["']([^"']*logo[^"']*\.(png|svg|jpg|webp)[^"']*)/i)?.[1] || html.match(/<img[^>]+alt=["'][^"']*logo[^"']*["'][^>]+src=["']([^"']+)/i)?.[1];
+
+  // Strategy: Jina first image is almost always the real site logo (in the header)
+  const jinaFirstImg = jinaMarkdown?.match(/\[!\[.*?\]\((https?:[^\s)]+\.(?:svg|png|webp|jpg))\)/)?.[1]
+    || jinaMarkdown?.match(/!\[.*?\]\((https?:[^\s)]+\.(?:svg|png|webp|jpg)[^\s)]*)\)/)?.[1];
+
+  // Filter partner/client logos from img[src*=logo]
+  const isPartnerLogo = (src) => /marcas|brands|partners|clients|clientes|parceiros|integra|allied/i.test(src || '');
+  const allLogoImgs = [...html.matchAll(/<img[^>]+src=["']([^"']*logo[^"']*\.(png|svg|jpg|webp)[^"']*)/gi)].map(m => m[1]);
+  const logoInSrc = allLogoImgs.find(src => !isPartnerLogo(src)) || null;
+  const logoInAlt = html.match(/<img[^>]+alt=["'][^"']*logo[^"']*["'][^>]+src=["']([^"']+)/i)?.[1];
   const headerImg = html.match(/<(?:header|nav)[^>]*>[\s\S]{0,3000}?<img[^>]+src=["']([^"']+)/i)?.[1];
-  const jinaFirstImg = jinaMarkdown?.match(/!\[[^\]]*\]\((https?:[^)]+)\)/)?.[1];
-  const logoUrl = toAbs(ogImage) || toAbs(appleIcon) || toAbs(faviconSvg) || toAbs(logoInSrc) || toAbs(headerImg) || (jinaFirstImg || null);
 
-  // ═══ COLORS (5 strategies) ═══
+  // Priority: Jina first (real header logo) > og:image > apple-icon > filtered logo img > header img > favicon
+  const logoUrl = (jinaFirstImg && !isPartnerLogo(jinaFirstImg) ? jinaFirstImg : null)
+    || toAbs(ogImage) || toAbs(appleIcon) || toAbs(logoInSrc) || toAbs(logoInAlt && !isPartnerLogo(logoInAlt) ? logoInAlt : null) || toAbs(headerImg) || toAbs(faviconSvg);
+
+  // ═══ COLORS (7 strategies — scan ALL HTML sources) ═══
   const colorSet = new Set();
-  const themeColor = html.match(/<meta[^>]+name=["']theme-color["'][^>]+content=["']([^"']+)/i)?.[1];
-  if (themeColor && themeColor.startsWith('#')) colorSet.add(themeColor);
-  for (const m of html.matchAll(/--[a-z-]*(?:color|primary|secondary|accent|brand|main)[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi)) colorSet.add(m[1]);
-  for (const block of (html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) || [])) { for (const c of (block.match(/#[0-9a-fA-F]{6}\b/g) || [])) colorSet.add(c); }
-  for (const m of html.matchAll(/style=["'][^"']*["']/gi)) { for (const c of (m[0].match(/#[0-9a-fA-F]{6}\b/g) || [])) colorSet.add(c); }
-  const noise = new Set(['ffffff', '000000', 'f5f5f5', 'eeeeee', 'e5e5e5', 'cccccc', '333333', '666666', '999999', '1a1a1a', 'fafafa', 'f8f8f8', '111111', '222222']);
-  const colors = [...colorSet].filter(c => { const h = c.toLowerCase().replace('#', ''); const f = h.length === 3 ? h.split('').map(x => x + x).join('') : h; return !noise.has(f); }).slice(0, 10);
+  const allHTML = fcHTML + '\n' + (rawHTML || ''); // Use BOTH sources for max coverage
 
-  // ═══ IMAGES (3 strategies) ═══
+  // 1. theme-color meta
+  const themeColor = allHTML.match(/<meta[^>]+name=["']theme-color["'][^>]+content=["']([^"']+)/i)?.[1];
+  if (themeColor && themeColor.startsWith('#')) colorSet.add(themeColor);
+
+  // 2. CSS custom properties
+  for (const m of allHTML.matchAll(/--[a-z-]*(?:color|primary|secondary|accent|brand|main)[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi)) colorSet.add(m[1]);
+
+  // 3. Colors in <style> blocks
+  for (const block of (allHTML.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) || [])) {
+    for (const c of (block.match(/#[0-9a-fA-F]{6}\b/g) || [])) colorSet.add(c);
+  }
+
+  // 4. Colors in inline styles
+  for (const m of allHTML.matchAll(/style=["'][^"']*["']/gi)) {
+    for (const c of (m[0].match(/#[0-9a-fA-F]{6}\b/g) || [])) colorSet.add(c);
+  }
+
+  // 5. Colors from background-color and color properties in HTML
+  for (const m of allHTML.matchAll(/(?:background-color|background|color|border-color)\s*:\s*(#[0-9a-fA-F]{3,6})/gi)) colorSet.add(m[1]);
+
+  // 6. Colors from Firecrawl HTML classes (often has compiled CSS)
+  for (const c of (fcHTML.match(/#[0-9a-fA-F]{6}\b/g) || []).slice(0, 200)) colorSet.add(c);
+
+  // 7. Colors from linked stylesheets referenced in HTML (extract from href)
+  // Can't fetch external CSS, but if Firecrawl rendered the page, colors may be in computed styles
+
+  const noise = new Set(['ffffff', '000000', 'f5f5f5', 'eeeeee', 'e5e5e5', 'cccccc', '333333', '666666', '999999', '1a1a1a', 'fafafa', 'f8f8f8', '111111', '222222', 'aaaaaa', 'bbbbbb', 'dddddd', 'f0f0f0', 'e0e0e0', 'd0d0d0', 'c0c0c0', 'b0b0b0', 'a0a0a0']);
+  const colors = [...colorSet].filter(c => {
+    const h = c.toLowerCase().replace('#', '');
+    const f = h.length === 3 ? h.split('').map(x => x + x).join('') : h;
+    return !noise.has(f) && f.length === 6;
+  }).slice(0, 12);
+
+  // ═══ IMAGES (3 strategies + smart filtering) ═══
   const imgSet = new Set();
   if (ogImage) { const a = toAbs(ogImage); if (a) imgSet.add(a); }
-  for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)/gi)) { const a = toAbs(m[1]); if (a && /\.(jpg|jpeg|png|webp|svg)(\?|$)/i.test(a)) imgSet.add(a); }
-  for (const m of (jinaMarkdown?.matchAll(/!\[[^\]]*\]\((https?:[^\s)]+)\)/g) || [])) imgSet.add(m[1]);
-  const images = [...imgSet].filter(Boolean).filter(i => !i.includes('1x1') && !i.includes('pixel') && !i.includes('tracking') && !i.includes('favicon') && i.length < 500).slice(0, 20);
+  // Firecrawl HTML images
+  for (const m of fcHTML.matchAll(/<img[^>]+src=["']([^"']+)/gi)) {
+    const a = toAbs(m[1]);
+    if (a && /\.(jpg|jpeg|png|webp|svg)(\?|$)/i.test(a)) imgSet.add(a);
+  }
+  // Jina images (often has more than Firecrawl)
+  for (const m of (jinaMarkdown?.matchAll(/\(?(https?:[^\s)"]+\.(?:jpg|jpeg|png|webp|svg)(?:\?[^\s)"]*)?)/g) || [])) {
+    const u = m[1].replace(/\)$/, '');
+    if (u.startsWith('http') && u.length < 500) imgSet.add(u);
+  }
+  // Filter out tiny icons, tracking pixels, and navigation SVGs
+  const isUsefulImage = (url) => {
+    const lower = url.toLowerCase();
+    if (/1x1|pixel|tracking|favicon|\.ico|wpp\.|whatsapp/i.test(lower)) return false;
+    // Filter tiny nav/UI icons (menu, close, arrow, chevron)
+    if (/icons?\/(menu|close|arrow|chevron|check|play|pause|search)/i.test(lower)) return false;
+    // Keep logos (they're useful), product images, and hero images
+    return true;
+  };
+  const images = [...imgSet].filter(Boolean).filter(isUsefulImage).slice(0, 25);
 
-  // ═══ HEADINGS ═══
-  const h1Set = new Set(); for (const m of markdown.matchAll(/(?:^|\n)#\s+(.+)/g)) h1Set.add(m[1].trim());
-  const h2Set = new Set(); for (const m of markdown.matchAll(/(?:^|\n)##\s+(.+)/g)) h2Set.add(m[1].trim());
-  const h3Set = new Set(); for (const m of markdown.matchAll(/(?:^|\n)###\s+(.+)/g)) h3Set.add(m[1].trim());
-  if (h1Set.size === 0) { for (const m of markdown.matchAll(/\*\*([^*]{5,60})\*\*/g)) { h1Set.add(m[1].trim()); if (h1Set.size >= 3) break; } }
+  // ═══ HEADINGS (use both Firecrawl + Jina markdown) ═══
+  const allMarkdown = markdown + '\n' + (jinaMarkdown || '');
+  const h1Set = new Set(); for (const m of allMarkdown.matchAll(/(?:^|\n)#\s+(.+)/g)) h1Set.add(m[1].replace(/[[\]]/g, '').trim());
+  const h2Set = new Set(); for (const m of allMarkdown.matchAll(/(?:^|\n)##\s+(.+)/g)) h2Set.add(m[1].replace(/[[\]]/g, '').trim());
+  const h3Set = new Set(); for (const m of allMarkdown.matchAll(/(?:^|\n)###\s+(.+)/g)) h3Set.add(m[1].replace(/[[\]]/g, '').trim());
+  // Fallback: extract bold text as pseudo-headings
+  if (h1Set.size === 0) { for (const m of allMarkdown.matchAll(/\*\*([^*]{5,80})\*\*/g)) { h1Set.add(m[1].trim()); if (h1Set.size >= 3) break; } }
+  // Also try HTML h1 tags directly from Firecrawl
+  if (h1Set.size === 0) { for (const m of fcHTML.matchAll(/<h1[^>]*>([^<]+)/gi)) h1Set.add(m[1].trim()); }
 
   // ═══ CONTACT ═══
   const phones = [...new Set(markdown.match(/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?\d{4,5}[\s\-]?\d{4}/g) || [])].filter(p => p.replace(/\D/g, '').length >= 8).slice(0, 3);
@@ -112,7 +171,7 @@ function parseAllSources(fcData, jinaMarkdown, rawHTML, originalUrl) {
       firecrawl_ok: !!fcData.scrape?.data?.markdown,
       jina_ok: (jinaMarkdown || '').length > 100,
       raw_html_ok: (rawHTML || '').length > 500,
-      logo_strategy: ogImage ? 'og:image' : appleIcon ? 'apple-icon' : faviconSvg ? 'favicon' : logoInSrc ? 'img-src' : headerImg ? 'header' : 'not found',
+      logo_strategy: (jinaFirstImg && !isPartnerLogo(jinaFirstImg)) ? 'jina-first' : ogImage ? 'og:image' : appleIcon ? 'apple-icon' : logoInSrc ? 'img-src-filtered' : headerImg ? 'header' : faviconSvg ? 'favicon' : 'not found',
       colors_found: colors.length,
       images_found: images.length,
     },
